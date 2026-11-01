@@ -3,19 +3,21 @@ import path from 'node:path';
 import os from 'node:os';
 import type {CoreRequest} from '../domain/types.js';
 import {configureLimits,checkTree} from '../domain/limits.js';
-import {editorAt} from '../h5p/editor.js';
-import {catalog,query} from '../h5p/catalog.js';
-import {administer} from '../h5p/administration.js';
-import {prepare} from '../h5p/preparation.js';
-import {exportActivity} from '../h5p/export.js';
-import {validate} from '../h5p/validation.js';
+
 import {preflight} from '../infrastructure/archive.js';
 configureLimits(process.env);
 /** Internal trusted-host API. Filesystem authorization stays at the host boundary. */
 export async function execute(request: CoreRequest): Promise<unknown> {
  checkTree(request);
  if(!path.isAbsolute(request.data_dir)) throw new Error('Absolute data_dir required');
+ if(request.backend==='native-content'){const {executeNative}=await import('../h5p/native-content.js');return executeNative(request);}
  if(request.action==='inspect-archive'){await preflight(request.path!);return {ok:true};}
+ const {editorAt}=await import('../h5p/editor.js');
+ const {catalog,query}=await import('../h5p/catalog.js');
+ const {administer}=await import('../h5p/administration.js');
+ const {prepare}=await import('../h5p/preparation.js');
+ const {exportActivity}=await import('../h5p/export.js');
+ const {validate}=await import('../h5p/validation.js');
  if(request.action==='discover'||request.action==='schema') return query(request);
  if(request.action==='setup') {
   for(const filename of request.packages||[]) await preflight(filename);

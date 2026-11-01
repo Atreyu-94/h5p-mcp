@@ -3,19 +3,22 @@
 Preparation checks native field types, required fields/defaults, list bounds,
 select options, numeric bounds and decimal precision, explicit text regexps,
 and explicit plain-text length limits. The generic checker treats numeric `step`
-as an editor hint, not an enforced multiple, and ignores HTML `maxLength`.
-The pinned Lumi enforcer is then run on a copy: it sanitizes HTML/tags and can
-truncate HTML despite that generic rule. Any persisted change blocks preparation
-and export with `LUMI_TRANSFORMATION_REQUIRED`, reporting `transformations` with
-paths and before/after values. Review and explicitly resubmit a corrected value;
-answers and LaTeX are never silently rewritten by this adapter. Lumi's enforcer
-is incomplete, so this contrast is not a comprehensive HTML security guarantee.
+as an editor hint, not an enforced multiple, while the subsequent independent text policy checks HTML `maxLength`.
+Preparation now applies an independent text/metadata policy rather than Lumi's
+SemanticsEnforcer. Text that would be changed is rejected with
+`CONTENT_TRANSFORMATION_REQUIRED` and before/after proposals; input, answers and
+LaTeX are not silently rewritten. HTML maxLength is explicitly rejected without
+truncation. Styles/classes/arbitrary attributes are not admitted by this initial
+policy. See [native content backend](docs/architecture/011-native-content.md) for
+allowed tags, attributes, protocols and deliberate differences from the old backend.
+Legacy full export audits its remaining sanitizer before saving and rejects
+transformations before publication, while allowing storage metadata for media.
 Widget business rules, accessibility and symbolic equivalence still need tests.
 
-Title/language/license are contrasted with Lumi's pinned save-metadata schema.
-Language also must be accepted by Intl.Locale. Valid BCP 47 tags that the H5P
-schema cannot store (for example es-419) receive INVALID_METADATA; they are not
-silently shortened. The supported intersection, not all BCP 47, is the contract.
+Title/language/license retain the previously supported metadata intersection.
+Language must also be accepted by Intl.Locale. Tags such as es-419 remain
+unsupported rather than silently shortened. The native backend uses manifests
+version 2; legacy preparation/export retains version 1 until its own migration.
 
 Missing nested `subContentId` values receive UUIDs. Supplied UUIDs must be valid
 and unique within the activity; valid identities survive repeated preparation.
@@ -94,7 +97,7 @@ storage phase. Internal disposable import/export paths are not user-selected roo
 Local media must match detected magic bytes and the declared MIME allowlist:
 raster images, supported audio/video containers, PDF and WebVTT. SVG and HTML are
 rejected. Magic bytes do not establish codec validity or browser playback. The same
-bounded bytes inspected for MIME are sent to Lumi; remote playback URLs are not
+bounded bytes inspected for MIME are passed to the selected storage backend; remote playback URLs are not
 downloaded. Dependency manifests bound nodes, edges and depth and reject cycles.
 
 The MCP call deadline includes thread admission, lock contention and all batch
@@ -139,3 +142,9 @@ Regression tests cover large-file registration, configurable read limits for bot
 artifact stores, integrity, registry eviction and main-library embed modes in
 actual Lumi-generated packages. The embed-mode test mutates a disposable
 TrueFalse fixture; it does not certify InteractiveBook playback or Moodle grading.
+
+The dependency lock pins the native HTML sanitizer and security updates to its
+utilities. An underscore 1.13.8 override replaces jsonpath's vulnerable exact
+1.13.6 dependency (GHSA-qpx9-hpmf-5gmw) while the legacy backend remains installed.
+Run `bun audit` against the current advisory registry; a clean result is not a
+claim that all dependencies are free of undiscovered vulnerabilities.

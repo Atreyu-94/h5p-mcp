@@ -3,6 +3,14 @@
 Create H5P activities through Bun, the official MCP SDK and Lumi, using each installed content
 type's native schema instead of four fixed quiz templates.
 
+## Native content backend
+
+An explicit internal `backend: 'native-content'` prepare/export path now runs
+without Lumi and writes content-only packages. The destination must already have
+the required libraries. Public CLI/MCP export still uses the existing backend;
+see [native backend contract](docs/architecture/011-native-content.md) for the
+API, HTML policy, manifests and validation limits.
+
 ## Workflow
 
 HTTP is opt-in: `h5p-mcp http <host-config.json>`. It requires configured OIDC
