@@ -6,8 +6,8 @@ import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
 import {Client} from '@modelcontextprotocol/client';
 import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
-const [bun,root]=process.argv.slice(2),repo=path.resolve(import.meta.dirname,'../..');
-const installed=path.join(root,'node_modules/h5p-mcp-authoring-probe'),load=createRequire(path.join(installed,'package.json'));
+const [bun,root,packageName='h5p-mcp-authoring-probe']=process.argv.slice(2),repo=path.resolve(import.meta.dirname,'../..');
+const installed=path.join(root,'node_modules',packageName),load=createRequire(path.join(installed,'package.json'));
 assert.throws(()=>load.resolve('@lumieducation/h5p-server'));assert.equal(await fs.access(path.join(installed,'h5p_mcp/lumi')).then(()=>true,()=>false),false);
 const entry=path.join(installed,'dist/core/cli.js'),data=path.join(root,'data'),exports=path.join(root,'exports');
 const fixture=path.join(repo,'tests/fixtures/libraries.zip'),lock=JSON.parse(await fs.readFile(path.join(repo,'tests/fixtures/libraries.lock.json'),'utf8'));
@@ -51,7 +51,7 @@ try{
   if(source.type==='accordion')assert.equal(content.panels[0].content.params.text,'<p>Distance</p>');
   if(source.type==='question_set'){assert.equal(content.questions.length,3);assert.equal(content.endGame.overallFeedback[1].from,60);}
   if(source.image){assert.equal(content.media.type.params.file.width,1);assert.equal(content.media.type.subContentId,compiled.identities.figure);}
-  observations.push({id:source.id,cli_mcp_parity:'passed',content_only:'passed',answer_preservation:'passed',package_sha256:hash(bytes)});console.log(`authoring ${source.id}: CLI/MCP parity and build passed without Lumi`);
+  observations.push({id:source.id,source_json_bytes:Buffer.byteLength(JSON.stringify(source)),native_params_json_bytes:Buffer.byteLength(JSON.stringify(compiled.activity.params)),cli_mcp_parity:'passed',content_only:'passed',answer_preservation:'passed',package_sha256:hash(bytes)});console.log(`authoring ${source.id}: CLI/MCP parity and build passed without Lumi`);
  }
 
  const invalid=await call('compile_h5p_source',{source:{...examples[1],correct_ids:['missing']}});assert.equal(invalid.ok,false);assert.equal(invalid.diagnostics[0].pointer,'/correct_ids/0');assert.equal(invalid.diagnostics[0].stage,'source');assert(!JSON.stringify(invalid).includes(root));

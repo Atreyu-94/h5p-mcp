@@ -36,10 +36,11 @@ function normalize(value) {
  return value;
 }
 const clients=[core(process.execPath),core(bun)];
-let comparisons=0;
+let comparisons=0;const packages=[];
 async function compare(request) {
  const values=await Promise.all(clients.map(client=>client.request(request)));
- assert.deepEqual(normalize(values[0]),normalize(values[1]));comparisons++;
+ const payloads=values.map(({id,...payload})=>normalize(payload));
+ assert.deepEqual(payloads[0],payloads[1]);comparisons++;
  return values[1];
 }
 try {
@@ -59,12 +60,17 @@ try {
  for(const example of examples) {
   const result=await compare({action:'prepare',activity:{language:'en',license:'U',assets:{},...example}});
   assert(result.ok&&result.result.ok,JSON.stringify(result));
-  console.log('parity: '+example.library);
+  const filename=path.join(root,'activity-'+String(packages.length+1).padStart(2,'0')+'.h5p');
+  const exported=await clients[1].request({action:'export',activity:result.result.activity,path:filename});
+  assert(exported.ok,JSON.stringify(exported));
+  const validated=await compare({action:'validate',path:filename});assert(validated.ok&&validated.result.ok);
+  packages.push({file:filename,title:example.title,library:example.library,sha256:createHash('sha256').update(await fs.readFile(filename)).digest('hex'),content:exported.result.content_json});
+  console.log('parity and native full export: '+example.library);
  }
  for(const params of [{question:42,correct:'true'},{question:'x',correct:'invalid'},{}]) {
   const result=await compare({action:'prepare',activity:{title:'Invalid',library:'H5P.TrueFalse 1.8',params,language:'en',license:'U',assets:{}}});
   assert(result.ok&&!result.result.ok,JSON.stringify(result));
  }
- const report={status:'passed',comparisons,artifacts:root,oracle:'Node versus Bun; Python baseline frozen at 4d721ae',retain_until:'two stable Bun releases'};
+ const report={status:'passed',comparisons,artifacts:root,packages,oracle:'Node versus Bun; Python baseline frozen at 4d721ae',retain_until:'two stable Bun releases'};
  await fs.writeFile(output,JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
 }finally{await Promise.all(clients.map(client=>client.close()));}

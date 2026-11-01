@@ -19,11 +19,15 @@ try {
         if ($LASTEXITCODE) { exit $LASTEXITCODE }
     } finally { Pop-Location }
     $entry=Join-Path $probeRoot 'node_modules/h5p-mcp/dist/core/cli.js'
+    & node (Join-Path $PSScriptRoot 'verify-distribution.mjs') (Join-Path $probeRoot 'node_modules/h5p-mcp')
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
     & node (Join-Path $PSScriptRoot 'bun-stdio-probe.mjs') $Bun $entry $Libraries
     if ($LASTEXITCODE) { exit $LASTEXITCODE }
     & node (Join-Path $PSScriptRoot 'bun-stdio-probe.mjs') $Bun $tarball
     if ($LASTEXITCODE) { exit $LASTEXITCODE }
     & $Bun (Join-Path $PSScriptRoot 'http-probe.mjs') $entry $Libraries
     if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    Write-Output "F4/F5/F6 package checks passed: $probeRoot"
+    & node (Join-Path $PSScriptRoot 'authoring-probe.mjs') $Bun $probeRoot 'h5p-mcp'
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    Write-Output "Native installed package, authoring and transport checks passed: $probeRoot"
 } finally { $env:BUN_INSTALL_CACHE_DIR=$previousCache }

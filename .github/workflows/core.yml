@@ -1,4 +1,4 @@
-name: Bun runtime and Node reference
+name: Native distribution and Node reference
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun test tests/core
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Compare retained Node and Bun corpus
+      - name: Compare Node/Bun corpus and validate native full exports
         run: |
           node tests/tooling/retirement-parity.mjs (Get-Command bun).Source retirement-parity.json
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -38,7 +38,7 @@ jobs:
         with:
           name: retirement-${{ matrix.os }}
           path: retirement-parity.json
-      - name: Verify F4/F5/F6 installed package, SDK clients and HTTP conformance subset
+      - name: Verify Lumi-free distribution, authoring, SDK clients and HTTP
         run: |
           npm ci --prefix tests/tooling --ignore-scripts
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
