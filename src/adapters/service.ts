@@ -121,6 +121,7 @@ export class Service {
     const asset=name==='upload_h5p_asset',filename=await this.authorize(args.path,asset?'ASSET':'PACKAGE');
     return this.stored(await vault.upload(asset?'asset':'package',args.mime,createReadStream(filename),ttl,signal));
    }
+   if(name==='prepare_stored_h5p_source')return this.stored(await vault.prepare(args.source,ttl,args.library_snapshot_id,signal,true));
    if(name==='prepare_stored_h5p_activity')return this.stored(await vault.prepare(args.activity,ttl,args.library_snapshot_id,signal));
    if(name==='export_prepared_h5p_activity')return this.stored(await vault.export(args.preparation_id,args.idempotency_key,args.target_profile_id,ttl,signal));
    if(name==='register_h5p_target_profile')return this.stored(await vault.target(args.profile,ttl));

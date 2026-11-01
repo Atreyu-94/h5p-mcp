@@ -7,7 +7,7 @@ import type {HttpConfig,Identity} from './auth.js';
 
 export const requirements:Record<string,string>={
  search_h5p_types:'h5p:read',get_h5p_type_contract:'h5p:read',
- prepare_stored_h5p_activity:'h5p:author',export_prepared_h5p_activity:'h5p:export',
+ prepare_stored_h5p_source:'h5p:author',prepare_stored_h5p_activity:'h5p:author',export_prepared_h5p_activity:'h5p:export',
  validate_stored_h5p_package:'h5p:validate',list_stored_h5p_objects:'h5p:read',
  revoke_stored_h5p_object:'h5p:author',register_h5p_target_profile:'h5p:author',
  capture_h5p_library_snapshot:'h5p:admin:libraries',activate_h5p_library_snapshot:'h5p:admin:libraries',

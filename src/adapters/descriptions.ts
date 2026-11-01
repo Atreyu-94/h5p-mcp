@@ -13,6 +13,7 @@ export const descriptions:Record<string,string>={
  install_h5p_library_package:'Install libraries from an authorized package; requires libraries:install and a mutable host.',
  upload_h5p_asset:'Copy and verify a local media file into owner-bound immutable storage; return its opaque asset ID.',
  upload_h5p_package:'Copy a package into owner-bound storage for explicit validation or administrative installation.',
+ prepare_stored_h5p_source:'Compile pinned authoring source using opaque uploaded asset IDs and an immutable library snapshot. Returns a preparation ID for authenticated, idempotent full export; no host paths.',
  prepare_stored_h5p_activity:'Prepare native content using opaque asset IDs and an immutable library snapshot. Returns a durable preparation ID and bounded author feedback.',
  export_prepared_h5p_activity:'Export a stored preparation with ownership, expiry and idempotency checks; optionally assess a known destination inventory.',
  validate_stored_h5p_package:'Validate an owner-bound package in disposable storage; does not certify browser playback or grading.',

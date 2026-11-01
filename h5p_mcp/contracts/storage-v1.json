@@ -368,6 +368,47 @@
       "required": [
         "revoked"
       ]
+    },
+    "stored_source": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/authoring_source"
+        },
+        {
+          "properties": {
+            "assets": {
+              "additionalProperties": {
+                "pattern": "^[0-9a-f]{32}$",
+                "type": "string"
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "stored_source_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "library_snapshot_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "ttl_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 31536000,
+          "default": 86400
+        },
+        "source": {
+          "$ref": "#/$defs/stored_source"
+        }
+      },
+      "required": [
+        "source"
+      ]
     }
   },
   "local": {
@@ -409,6 +450,10 @@
     ],
     "register_h5p_target_profile": [
       "stored_target_input",
+      "stored_output"
+    ],
+    "prepare_stored_h5p_source": [
+      "stored_source_input",
       "stored_output"
     ]
   }

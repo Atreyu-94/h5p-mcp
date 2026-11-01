@@ -67,8 +67,9 @@ export class Vault {
    }finally{await pinned.release();}
   }finally{await generations.close();}
  }
- async prepare(input:Native,ttl=day,snapshotID?:string,callerSignal?:AbortSignal) {
-  if(!valid('prepare_remote_input',input))throw invalidInput('prepare_remote_input');
+ async prepare(input:Native,ttl=day,snapshotID?:string,callerSignal?:AbortSignal,source=false) {
+  const contract=source?'stored_source':'prepare_remote_input';
+  if(!valid(contract,input))throw invalidInput(contract);
   const snapshot=snapshotID?await this.objects.get(snapshotID,'libraries'):await this.snapshot(false,callerSignal);
   if(snapshot.expires<this.objects.now()+ttl)throw storageError('OBJECT_EXPIRED');
   return this.objects.publish('preparation',ttl,async(stage,final,signal)=>{
@@ -83,7 +84,7 @@ export class Vault {
     assets[name]=path.join(stage,'assets',file);finalAssets[name]=path.join(final,'assets',file);
     await fs.writeFile(assets[name],bytes,{flag:'wx'});
    }
-   const result:Native=await this.pool.run(()=>isolated({action:'prepare',data_dir:path.join(snapshot.root,'data'),activity:{language:'en',license:'U',...input,assets}},signal,[path.join(stage,'assets')]),signal);
+   const result:Native=await this.pool.run(()=>isolated({action:source?'compile':'prepare',data_dir:path.join(snapshot.root,'data'),...(source?{source:{...input,assets}}:{activity:{language:'en',license:'U',...input,assets}})},signal,[path.join(stage,'assets')]),signal);
    if(!result.ok)throw Object.assign(storageError('SCHEMA_VALIDATION_FAILED'),{details:result.diagnostics,feedback:feedback(result)});
    const activity={...result.activity,assets:finalAssets};
    await fs.writeFile(path.join(stage,'preparation.json'),JSON.stringify({activity,library_snapshot_id:snapshot.id}));
@@ -102,6 +103,7 @@ export class Vault {
   const replay=await this.objects.replay(key,inputDigest,'artifact');if(replay)return replay;
   const prepared=await this.objects.get(preparationID,'preparation');
   const value=JSON.parse((await this.objects.read(preparationID,'preparation','preparation.json')).toString('utf8'));
+  if(value.activity?.preparation?.version!==2||value.activity.preparation.engine!=='native-content-v1')throw storageError('STALE_PREPARATION');
   const snapshot=await this.objects.get(value.library_snapshot_id,'libraries');
   const target=targetID?(await this.objects.get(targetID,'target')).metadata as Target:undefined;
   const assessment=compatibility(value.activity.preparation.libraries,snapshot.metadata.lock,target);
