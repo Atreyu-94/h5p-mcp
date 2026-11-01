@@ -107,4 +107,3 @@ export async function query(request: Native) {
       note: 'Native H5P semantics, not JSON Schema. Nested library options refer to separate schemas; query those exact versions. Use the exact library and native params with create_h5p_activity.' };
 
 }
-

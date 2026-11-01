@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Bun)
+param([Parameter(Mandatory=$true)][string]$Bun,[switch]$PackageOperations)
 $ErrorActionPreference='Stop'
 $repo=Resolve-Path (Join-Path $PSScriptRoot '../..')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('h5p-authoring-probe-'+[guid]::NewGuid().ToString('N'))
@@ -23,7 +23,8 @@ try {
  $env:BUN_INSTALL_CACHE_DIR=Join-Path $root 'cache'
  Push-Location $root
  try { & $Bun add --ignore-scripts (Join-Path $root 'h5p-mcp-authoring-probe-0.0.0.tgz');if($LASTEXITCODE){throw 'Install failed'} } finally {Pop-Location}
- & node (Join-Path $PSScriptRoot 'authoring-probe.mjs') $Bun $root
+ if($PackageOperations){ & $Bun (Join-Path $PSScriptRoot 'package-operations-probe.mjs') $root $repo }
+ else { & node (Join-Path $PSScriptRoot 'authoring-probe.mjs') $Bun $root }
  if($LASTEXITCODE){throw 'Authoring probe failed'}
 } finally {$env:BUN_INSTALL_CACHE_DIR=$oldCache}
 Write-Output "Authoring without Lumi passed: $root"

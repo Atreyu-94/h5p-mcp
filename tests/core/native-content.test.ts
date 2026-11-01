@@ -122,3 +122,21 @@ test('native full export preserves every pinned library file and keeps editor de
   expect(result.h5p_json.preloadedDependencies.some((item:Native)=>item.machineName.startsWith('H5PEditor.'))).toBe(false);expect(result.verification.importation).toBe('not_run');
  }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test('native package validation is read-only, installation detects conflicts, and Hub requests are explicit',async()=>{
+ const {validatePackage,installPackage}=await import('../../src/h5p/packages.js'),{query}=await import('../../src/h5p/catalog.js');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-package-ops-')),engine=new Engine();let server:ReturnType<typeof Bun.serve>|undefined;
+ try{
+  await fixture(root);const filename=path.join(root,'full.h5p');await engine.run({action:'export',backend:'native-content',export_mode:'with-libraries',data_dir:root,path:filename,activity:{title:'Native',language:'en',license:'U',library:'H5P.TrueFalse 1.8',params:{question:'<p>Correct?</p>',correct:'true'}}});
+  expect((await validatePackage(filename)).engine).toBe('native-package-v1');
+  const target=path.join(root,'target');expect((await installPackage(filename,target)).ok).toBe(true);expect((await installPackage(filename,target)).ok).toBe(true);
+  await fs.appendFile(path.join(target,'libraries/H5P.TrueFalse-1.8/semantics.json'),' ');await expect(installPackage(filename,target)).rejects.toMatchObject({code:'LIBRARY_VERSION_MISMATCH'});
+  const empty=path.join(root,'empty');await fs.mkdir(empty);expect((await query({action:'discover',data_dir:empty,offset:0,limit:20})).total).toBe(0);expect(await fs.readdir(empty)).toEqual([]);
+  let hits=0;server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:async request=>{hits++;const url=new URL(request.url);if(url.pathname==='/sites')return Response.json({uuid:'native-test-site'});if(request.method==='POST')return Response.json({contentTypes:[{id:'H5P.TrueFalse',title:'True False',version:{major:1,minor:8,patch:21},coreApiVersionNeeded:{major:1,minor:28}}]});return new Response(await fs.readFile(filename));}});
+  const base=`http://127.0.0.1:${server.port}/`;await fs.writeFile(path.join(empty,'config.json'),JSON.stringify({hubRegistrationEndpoint:base+'sites',hubContentTypesEndpoint:base+'types/'}));
+  await query({action:'discover',data_dir:empty,offset:0,limit:20});expect(hits).toBe(0);
+  expect((await query({action:'discover',refresh:true,data_dir:empty,offset:0,limit:20})).total).toBe(1);expect(hits).toBe(2);
+  await query({action:'discover',data_dir:empty,offset:0,limit:20});expect(hits).toBe(2);
+  const installed=await query({action:'schema',install_if_missing:true,machine_name:'H5P.TrueFalse',data_dir:empty});expect(installed.library).toBe('H5P.TrueFalse 1.8');expect(hits).toBe(4);
+ }finally{await server?.stop(true);await engine.close();await fs.rm(root,{recursive:true,force:true});}
+},120000);
