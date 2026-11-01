@@ -134,3 +134,25 @@ test('pinned QuestionSet runtime sums child scores and uses aggregate feedback t
   const feedback=runInNewContext('('+match![1]+')'),ranges=[{from:0,to:59,feedback:'Review'},{from:60,to:100,feedback:'Passed'}];expect(feedback(ranges,0.5999)).toBe('Review');expect(feedback(ranges,0.6)).toBe('Passed');expect(feedback(ranges,1)).toBe('Passed');
  }finally{await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test('QuestionSet children inherit UI defaults while retaining explicit child overrides',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-ui-inheritance-'));
+ try{
+  await compilerFixture(root);
+  const child:Native=trueFalse();delete child.schema_version;delete child.project_id;
+  child.ui={overrides:{'l10n/trueText':'Sí'}};
+  const source:Native={schema_version:'1',project_id:'demo',id:'quiz',type:'question_set',title:'Quiz',library:pin('H5P.QuestionSet 1.21'),pass_percentage:60,ui:{language:'es',missing:'fallback'},questions:[child]};
+  const result=await compileSource(source,path.join(root,'libraries'));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.activity.params.questions[0].params.l10n).toMatchObject({trueText:'Sí',falseText:'Falso'});
+  child.ui.language='en';
+  const english=await compileSource(source,path.join(root,'libraries'));
+  expect(english.diagnostics).toEqual([]);
+  expect(english.activity.params.questions[0].params.l10n).toMatchObject({trueText:'Sí',falseText:'False'});
+  child.ui={language:'zz'};
+  expect((await compileSource(source,path.join(root,'libraries'))).ok).toBe(true);
+  child.ui.missing='error';
+  const missing=await compileSource(source,path.join(root,'libraries'));
+  expect(missing.diagnostics).toContainEqual(expect.objectContaining({pointer:'/questions/0/ui/language',reason:'translation'}));
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+},120000);

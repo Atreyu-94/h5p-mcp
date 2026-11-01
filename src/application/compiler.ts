@@ -109,7 +109,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   for(const [i,child] of source.questions.entries()){
    const origin=`/questions/${i}`,prefix=`/params/questions/${i}`;
    claim(child.id,origin+'/id');
-   const result=await compileSource({schema_version:'1',project_id:source.project_id,language:normalized.language,license:normalized.license,ui:{language:normalized.ui.language,missing:normalized.ui.missing},...child,assets:normalized.assets},libraries,false);
+   const result=await compileSource({schema_version:'1',project_id:source.project_id,language:normalized.language,license:normalized.license,...child,ui:{language:normalized.ui.language,missing:normalized.ui.missing,...child.ui},assets:normalized.assets},libraries,false);
    for(const item of result.diagnostics)diagnostics.push({...item,pointer:origin+item.pointer});
    warnings.push(...result.warnings);
    if(!result.ok)continue;
