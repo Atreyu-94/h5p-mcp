@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Bun,[switch]$PackageOperations)
+param([Parameter(Mandatory=$true)][string]$Bun,[switch]$PackageOperations,[switch]$Transports)
 $ErrorActionPreference='Stop'
 $repo=Resolve-Path (Join-Path $PSScriptRoot '../..')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('h5p-authoring-probe-'+[guid]::NewGuid().ToString('N'))
@@ -26,5 +26,13 @@ try {
  if($PackageOperations){ & $Bun (Join-Path $PSScriptRoot 'package-operations-probe.mjs') $root $repo }
  else { & node (Join-Path $PSScriptRoot 'authoring-probe.mjs') $Bun $root }
  if($LASTEXITCODE){throw 'Authoring probe failed'}
+ if($Transports){
+  $entry=Join-Path $root 'node_modules/h5p-mcp-authoring-probe/dist/core/cli.js'
+  $libraries=Join-Path $root 'data-archived/libraries'
+  & node (Join-Path $PSScriptRoot 'bun-stdio-probe.mjs') $Bun $entry $libraries
+  if($LASTEXITCODE){throw 'Installed stdio probe failed'}
+  & $Bun (Join-Path $PSScriptRoot 'http-probe.mjs') $entry $libraries
+  if($LASTEXITCODE){throw 'Installed HTTP probe failed'}
+ }
 } finally {$env:BUN_INSTALL_CACHE_DIR=$oldCache}
 Write-Output "Authoring without Lumi passed: $root"

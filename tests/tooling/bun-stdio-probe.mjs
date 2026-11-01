@@ -16,7 +16,8 @@ const shape={'~standard':{version:1,vendor:'probe',validate(value){return {value
 for(const modern of [false,true]) {
  const client=new Client({name:'f4-probe',version:'1'},modern?{versionNegotiation:{mode:'auto'}}:{});
  const args=entry.endsWith('.tgz')?['x','--bun','--package',entry,'h5p-mcp','stdio']:[entry,'stdio'];
- const transport=new StdioClientTransport({command:bun,args,cwd:root,env,stderr:'pipe'});
+ // A 16 MiB raw resource needs more than the SDK's default 10 MiB after base64.
+ const transport=new StdioClientTransport({command:bun,args,cwd:root,env,stderr:'pipe',maxBufferSize:33554432});
  let errors='';transport.stderr?.on('data',chunk=>errors+=chunk);
  try {
   console.log(JSON.stringify({stage:'connect',modern,entry}));
@@ -77,7 +78,7 @@ for(const modern of [false,true]) {
   if(modern&&libraries) {
    await storageProbe(client,root,async(scopes)=>{
     const reopened=new Client({name:'f5-restart',version:'1'},{versionNegotiation:{mode:'auto'}});
-    await reopened.connect(new StdioClientTransport({command:bun,args,cwd:root,env:{...env,H5P_MCP_ADMIN_SCOPES:scopes},stderr:'pipe'}));
+    await reopened.connect(new StdioClientTransport({command:bun,args,cwd:root,env:{...env,H5P_MCP_ADMIN_SCOPES:scopes},stderr:'pipe',maxBufferSize:33554432}));
     return reopened;
    });
   } else if(modern) {
@@ -87,6 +88,6 @@ for(const modern of [false,true]) {
    await fs.rmdir(path.join(root,'data/.core-lock'));
   }
   console.log(JSON.stringify({modern,tools:tools.length,skills:'passed',shutdown:'passed',errors}));
- } finally {await client.close();}
+ } catch(error){console.error(errors);throw error;} finally {await client.close();}
 }
 console.log(JSON.stringify({status:'passed',root,entry,runtime:bun,childPATH:env.PATH,conformance:'official HTTP CLI not applicable to stdio'}));

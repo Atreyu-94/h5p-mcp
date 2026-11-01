@@ -6,9 +6,13 @@ import {createHash} from 'node:crypto';
 // Run against the installed tarball, through the real SDK client and stdio process.
 export async function storageProbe(client,root,reconnect) {
  const call=async(connection,name,args)=>{
+  console.log('storage: '+name);
   const result=(await connection.callTool({name,arguments:args})).structuredContent;
   assert.notEqual(result.ok,false,JSON.stringify(result));return result;
  };
+ const authoringSource=JSON.parse((await client.readResource({uri:'h5p-authoring://v1/examples'})).contents[0].text)[0];
+ const compiled=await call(client,'prepare_stored_h5p_source',{source:authoringSource});
+ assert.equal((await call(client,'export_prepared_h5p_activity',{preparation_id:compiled.object_id,idempotency_key:'stdio-source'})).kind,'artifact');
  const png=path.join(root,'source.png');
  await fs.writeFile(png,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ioAAAAASUVORK5CYII=','base64'));
  const asset=await call(client,'upload_h5p_asset',{path:png,mime:'image/png'});

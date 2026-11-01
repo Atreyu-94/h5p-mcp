@@ -3,7 +3,9 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
 import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 import {Client,StreamableHTTPClientTransport} from '@modelcontextprotocol/client';
 const [entry,libraries]=process.argv.slice(2),core=path.dirname(entry);
@@ -37,6 +39,36 @@ try {
  const contract=await call(client,'get_h5p_type_contract',{machine_name:'H5P.TrueFalse',major_version:1,minor_version:8});
  assert((await client.readResource({uri:contract.raw_schema.uri})).contents[0].text.includes('semantics'));
  const prepared=await call(client,'prepare_stored_h5p_activity',{activity:{title:'HTTP math',library:'H5P.TrueFalse 1.8',params:{question:'<p>\\(1+1=2\\)</p>',correct:'true'}}});
+ const source=JSON.parse((await client.readResource({uri:'h5p-authoring://v1/examples'})).contents[0].text)[0];
+ const pins=JSON.parse((await client.readResource({uri:'h5p-authoring://v1/adapters'})).contents[0].text);
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ioAAAAASUVORK5CYII=','base64');
+ const assetResponse=await fetch(settings.resource.replace('/mcp','/uploads/assets'),{method:'POST',headers:{authorization:'Bearer '+access,'content-type':'image/png'},body:png});
+ assert.equal(assetResponse.status,201);const asset=await assetResponse.json();
+ source.assets={picture:asset.object_id};
+ source.image={id:'picture',asset:'picture',mime:'image/png',alt:'A square',library:{name:'H5P.Image 1.1',...pins['H5P.Image 1.1']},copyright:{author:'Teacher',license:'CC BY'}};
+ const sourcePrepared=await call(client,'prepare_stored_h5p_source',{source});
+ const sourceArtifact=await call(client,'export_prepared_h5p_activity',{preparation_id:sourcePrepared.object_id,idempotency_key:'http-source'});
+ const remoteDownload=await fetch(settings.resource.replace('/mcp','/artifacts/'+sourceArtifact.object_id),{headers:{authorization:'Bearer '+access}});
+ assert.equal(remoteDownload.status,200);
+ const remoteFile=path.join(root,'remote-source.h5p');await fs.writeFile(remoteFile,Buffer.from(await remoteDownload.arrayBuffer()));
+ const imageFile=path.join(root,'picture.png');await fs.writeFile(imageFile,png);
+ const inputFile=path.join(root,'source.json');await fs.writeFile(inputFile,JSON.stringify({...source,assets:{picture:imageFile}}));
+ const env={...process.env,H5P_MCP_DATA_DIR:path.join(settings.data,identity.extra.principal.tenant),H5P_MCP_EXPORT_DIR:root,H5P_MCP_ASSET_ROOTS:JSON.stringify([root])};
+ const compiled=spawnSync(process.execPath,[entry,'compile',inputFile],{env,encoding:'utf8',timeout:60000});
+ assert.equal(compiled.status,0,compiled.stdout+compiled.stderr);
+ const activityFile=path.join(root,'activity.json');await fs.writeFile(activityFile,JSON.stringify(JSON.parse(compiled.stdout).activity));
+ const exported=spawnSync(process.execPath,[entry,'export',activityFile,'cli-source'],{env,encoding:'utf8',timeout:60000});
+ assert.equal(exported.status,0,exported.stdout+exported.stderr);
+ const inventory=async filename=>{
+  const zip=await createRequire(entry)('yauzl-promise').open(filename),files={};
+  try{for await(const member of zip){const hash=createHash('sha256');for await(const bytes of await member.openReadStream())hash.update(bytes);files[member.filename]=hash.digest('hex');}}finally{await zip.close();}
+  return files;
+ };
+ assert.deepEqual(await inventory(remoteFile),await inventory(path.join(root,'cli-source.h5p')));
+ const rejected=(await client.callTool({name:'prepare_stored_h5p_source',arguments:{source:{...source,assets:{bad:'C:/private.png'}}}})).structuredContent;
+ assert.equal(rejected.ok,false);assert(!JSON.stringify(rejected).includes('C:/private'));
+ const readonly=await connect(await sign('a','h5p:read'));
+ try{assert(!(await readonly.listTools()).tools.some(t=>t.name==='prepare_stored_h5p_source'));await assert.rejects(readonly.callTool({name:'prepare_stored_h5p_source',arguments:{source}}));}finally{await readonly.close();}
  const input={preparation_id:prepared.object_id,idempotency_key:'http-example'};
  const artifact=await call(client,'export_prepared_h5p_activity',input);
  const downloaded=await fetch(settings.resource.replace('/mcp','/artifacts/'+artifact.object_id),{headers:{authorization:'Bearer '+access}});

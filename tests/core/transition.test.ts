@@ -48,3 +48,21 @@ test('native transition preserves snapshots and artifacts, rejects legacy prepar
   expect((await objects.get(snapshots.id,'libraries')).metadata.lock).toEqual(snapshots.metadata.lock);
  }finally{await engine.close();other.close();await vault.close();await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test('a stopped store copy preserves rollback artifacts independently of new writes and revocation',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-store-rollback-')),principal={tenant:'a',owner:'teacher'};
+ const old=new Objects(path.join(root,'before'),principal),upgraded=new Objects(path.join(root,'upgrade'),principal);
+ try{
+  await old.initialize();
+  const artifact=await old.publish('artifact',60000,async stage=>{await fs.writeFile(path.join(stage,'payload'),'old exported bytes');return {mime:'application/zip'};});
+  old.close();
+  await fs.cp(old.root,upgraded.root,{recursive:true});
+  await upgraded.initialize();
+  expect(await upgraded.read(artifact.id,'artifact')).toEqual(Buffer.from('old exported bytes'));
+  await upgraded.revoke(artifact.id);
+  await old.initialize();
+  expect(await old.read(artifact.id,'artifact')).toEqual(Buffer.from('old exported bytes'));
+  const fresh=await upgraded.publish('artifact',60000,async stage=>{await fs.writeFile(path.join(stage,'payload'),'new export');return {mime:'application/zip'};});
+  await expect(old.get(fresh.id)).rejects.toMatchObject({code:'OBJECT_NOT_FOUND'});
+ }finally{old.close();upgraded.close();await fs.rm(root,{recursive:true,force:true});}
+});
