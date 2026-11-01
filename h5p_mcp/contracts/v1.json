@@ -72,6 +72,13 @@
         "suggested_fix": {
           "type": "string",
           "maxLength": 256
+        },
+        "stage": {
+          "enum": [
+            "source",
+            "adapter",
+            "native"
+          ]
         }
       }
     },

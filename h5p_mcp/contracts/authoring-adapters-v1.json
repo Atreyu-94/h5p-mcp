@@ -1,0 +1,14 @@
+{
+  "H5P.TrueFalse 1.8": {
+    "patch": 21,
+    "semantics_sha256": "0f4da26f5cd452e84b1c042608f999e588e4e9e0033030d18fc50500b873a22f"
+  },
+  "H5P.MultiChoice 1.16": {
+    "patch": 27,
+    "semantics_sha256": "57435fbb96627f7de33e3289d266aa78cccb95148ff44141818a06c2d1ea4f55"
+  },
+  "H5P.Image 1.1": {
+    "patch": 33,
+    "semantics_sha256": "0c2f029cb5d13b8846530271548089b3f9fc87c1035d7af8c3dadedabf5aee1a"
+  }
+}

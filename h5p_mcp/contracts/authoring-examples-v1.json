@@ -1,0 +1,86 @@
+[
+  {
+    "schema_version": "1",
+    "project_id": "units",
+    "id": "q1",
+    "type": "true_false",
+    "title": "Length unit",
+    "library": {
+      "name": "H5P.TrueFalse 1.8",
+      "patch": 21,
+      "semantics_sha256": "0f4da26f5cd452e84b1c042608f999e588e4e9e0033030d18fc50500b873a22f"
+    },
+    "language": "es",
+    "ui": {
+      "language": "es"
+    },
+    "question": {
+      "format": "plain",
+      "value": "El metro es una unidad de longitud."
+    },
+    "correct": true,
+    "feedback": {
+      "correct": {
+        "format": "plain",
+        "value": "Correcto."
+      },
+      "incorrect": {
+        "format": "plain",
+        "value": "El metro mide longitud."
+      }
+    }
+  },
+  {
+    "schema_version": "1",
+    "project_id": "units",
+    "id": "q2",
+    "type": "multi_choice",
+    "title": "Length units",
+    "library": {
+      "name": "H5P.MultiChoice 1.16",
+      "patch": 27,
+      "semantics_sha256": "57435fbb96627f7de33e3289d266aa78cccb95148ff44141818a06c2d1ea4f55"
+    },
+    "language": "es",
+    "ui": {
+      "language": "es"
+    },
+    "question": {
+      "format": "plain",
+      "value": "Selecciona las unidades de longitud."
+    },
+    "mode": "multiple",
+    "scoring": "partial_minus_incorrect",
+    "correct_ids": [
+      "metre",
+      "kilometre"
+    ],
+    "choices": [
+      {
+        "id": "metre",
+        "text": {
+          "format": "plain",
+          "value": "Metro"
+        }
+      },
+      {
+        "id": "second",
+        "text": {
+          "format": "plain",
+          "value": "Segundo"
+        },
+        "selected_feedback": {
+          "format": "plain",
+          "value": "El segundo mide tiempo."
+        }
+      },
+      {
+        "id": "kilometre",
+        "text": {
+          "format": "plain",
+          "value": "Kilómetro"
+        }
+      }
+    ]
+  }
+]

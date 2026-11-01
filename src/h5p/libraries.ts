@@ -37,6 +37,12 @@ export class FileLibraryRepository implements LibraryRepository {
    !Number.isSafeInteger(metadata.patchVersion)||metadata.patchVersion<0)throw invalid();
   return metadata;
  }
+ async getTranslation(version:LibraryVersion,language:string) {
+  if(!/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(language))throw invalid();
+  const directory=await this.directory(version),languages=await fs.realpath(path.join(directory,'language'));
+  if(path.dirname(languages)!==directory)throw invalid();
+  return this.json(languages,language+'.json');
+ }
  async getSemantics(version:LibraryVersion) {
   const directory=await this.directory(version);
   await this.getLibrary(version);

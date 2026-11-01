@@ -1,0 +1,29 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema",
+ "$id":"h5p-authoring://v1/schema",
+ "title":"Single-activity H5P authoring v1",
+ "type":"object","additionalProperties":false,
+ "required":["schema_version","project_id","id","type","title","library","question"],
+ "properties":{
+  "schema_version":{"const":"1"},"project_id":{"$ref":"#/$defs/id"},"id":{"$ref":"#/$defs/id"},
+  "type":{"enum":["true_false","multi_choice"]},"title":{"type":"string","minLength":1,"maxLength":200},
+  "library":{"$ref":"#/$defs/pin"},"language":{"type":"string","pattern":"^[a-zA-Z-]{2,10}$"},"license":{"type":"string"},
+  "ui":{"type":"object","additionalProperties":false,"properties":{"language":{"type":"string","pattern":"^[a-z]{2,3}(?:-[A-Z]{2})?$"},"missing":{"enum":["error","fallback"]},"overrides":{"type":"object","maxProperties":50,"additionalProperties":{"type":"string","maxLength":2048}}}},
+  "question":{"$ref":"#/$defs/text"},"correct":{"type":"boolean"},
+  "feedback":{"type":"object","additionalProperties":false,"required":["correct","incorrect"],"properties":{"correct":{"$ref":"#/$defs/text"},"incorrect":{"$ref":"#/$defs/text"}}},
+  "mode":{"enum":["single","multiple"]},"scoring":{"enum":["all_or_nothing","partial_minus_incorrect"]},
+  "choices":{"type":"array","minItems":2,"maxItems":50,"items":{"type":"object","additionalProperties":false,"required":["id","text"],"properties":{"id":{"$ref":"#/$defs/id"},"text":{"$ref":"#/$defs/text"},"selected_feedback":{"$ref":"#/$defs/text"},"unselected_feedback":{"$ref":"#/$defs/text"}}}},
+  "correct_ids":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}},
+  "retry":{"type":"boolean"},"show_solution":{"type":"boolean"},"shuffle":{"type":"boolean"},
+  "assets":{"type":"object","maxProperties":100,"propertyNames":{"pattern":"^[A-Za-z][A-Za-z0-9_-]{0,63}$"},"additionalProperties":{"type":"string","maxLength":4096}},
+  "image":{"type":"object","additionalProperties":false,"required":["id","asset","mime","alt","library","copyright"],"properties":{"id":{"$ref":"#/$defs/id"},"asset":{"$ref":"#/$defs/id"},"mime":{"enum":["image/png","image/jpeg","image/gif","image/webp"]},"alt":{"type":"string","minLength":1,"maxLength":512},"library":{"$ref":"#/$defs/pin"},"copyright":{"type":"object","additionalProperties":false,"required":["author","license"],"properties":{"author":{"type":"string","minLength":1,"maxLength":200},"license":{"enum":["U","C","CC BY","CC BY-SA","CC0 1.0","PD"]}}}}}
+ },
+ "allOf":[
+  {"if":{"properties":{"type":{"const":"true_false"}}},"then":{"required":["correct"],"not":{"anyOf":[{"required":["choices"]},{"required":["correct_ids"]},{"required":["mode"]},{"required":["scoring"]},{"required":["shuffle"]}]}},"else":{"required":["choices","correct_ids","mode","scoring"],"not":{"required":["correct"]}}}
+ ],
+ "$defs":{
+  "id":{"type":"string","pattern":"^[A-Za-z][A-Za-z0-9_-]{0,63}$"},
+  "text":{"type":"object","additionalProperties":false,"required":["format","value"],"properties":{"format":{"enum":["plain","markdown"]},"value":{"type":"string","minLength":1,"maxLength":16384}}},
+  "pin":{"type":"object","additionalProperties":false,"required":["name","patch","semantics_sha256"],"properties":{"name":{"enum":["H5P.TrueFalse 1.8","H5P.MultiChoice 1.16","H5P.Image 1.1"]},"patch":{"type":"integer","minimum":0},"semantics_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"}}}
+ }
+}
