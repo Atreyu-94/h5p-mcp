@@ -11,14 +11,13 @@ LaTeX are not silently rewritten. HTML maxLength is explicitly rejected without
 truncation. Styles/classes/arbitrary attributes are not admitted by this initial
 policy. See [native content backend](docs/architecture/011-native-content.md) for
 allowed tags, attributes, protocols and deliberate differences from the old backend.
-Legacy full export audits its remaining sanitizer before saving and rejects
-transformations before publication, while allowing storage metadata for media.
+Public and persistent exports use this same native policy and preserve accepted content.
 Widget business rules, accessibility and symbolic equivalence still need tests.
 
 Title/language/license retain the previously supported metadata intersection.
 Language must also be accepted by Intl.Locale. Tags such as es-419 remain
 unsupported rather than silently shortened. The native backend uses manifests
-version 2; legacy preparation/export retains version 1 until its own migration.
+version 2; version 1 preparations require explicit re-preparation before export. Existing artifact bytes remain readable.
 
 Missing nested `subContentId` values receive UUIDs. Supplied UUIDs must be valid
 and unique within the activity; valid identities survive repeated preparation.
@@ -72,11 +71,10 @@ Positive integer environment variables configure these defaults:
 Media reads run sequentially and are bounded even if a file grows after stat.
 ZIP validation checks compressed size before opening, bounds expansion ratio,
 and drains members in 64 KiB chunks to check readable byte counts and CRC before
-Lumi import. It rejects symlinks/special entries, ambiguous separators, Windows
+native import. It rejects symlinks/special entries, ambiguous separators, Windows
 reserved names/ADS, Unicode NFC/case-fold collisions and file/directory conflicts.
 Explicit directory entries remain allowed. Package validation and administrative
-installation share this preflight. A version-specific adapter bounds Lumi's ZIP
-extraction in the isolated worker, including streamed bytes and exclusive files.
+installation share this preflight. Native extraction runs in the isolated worker after preflight, using exclusive files.
 The Bun preflight rejects portable path collisions, including the tested Unicode
 case-fold aliases. JSON input and worker output collection are bounded. Process
 timeout and local interruption kill and reap the child. Python is only the frozen

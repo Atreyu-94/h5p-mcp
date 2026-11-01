@@ -4,8 +4,7 @@
 stdio tools. CLI equivalents are `compile`, `check` and `build`. All use the same
 worker-isolated compiler and the native content-only backend. They do not install
 libraries, select latest versions, download media or fall back to Lumi. The
-production package still includes Lumi for older operations until that migration
-is complete. HTTP source authoring is not advertised. Durable source capture and
+production package still contains the legacy dependency pending packaging cleanup; execution uses the native backend. Persistent source authoring is available in stdio and HTTP through prepare_stored_h5p_source with uploaded asset IDs. Durable source capture and
 reconstruction are available through the local CLI commands described below.
 
 ```powershell
@@ -100,7 +99,7 @@ build compiles and publishes an exclusive content-only .h5p; existing files fail
 The destination must already have the exact library major/minor versions and a
 compatible Core. Export is not evidence that an unknown destination supports it.
 Use build for source documents; the older export tool remains the separate
-full-library legacy workflow.
+full-library native export workflow.
 
 Public reports use bounded diagnostics and explicit truncation flags: at most
 100 diagnostics and transformations, 2048 characters per before/after proposal,

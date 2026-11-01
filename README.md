@@ -1,6 +1,6 @@
 # H5P MCP
 
-Create H5P activities through Bun, the official MCP SDK and Lumi, using each installed content
+Create H5P activities through Bun, the official MCP SDK and a native TypeScript backend, using each installed content
 type's native schema instead of four fixed quiz templates.
 
 ## Native content backend
@@ -13,11 +13,12 @@ media and pinned libraries outside preparation TTL.
 See [JSON authoring v1](docs/architecture/012-json-authoring.md) for schema, examples,
 scoring, translations and destination requirements.
 
-An explicit internal `backend: 'native-content'` prepare/export path now runs
-without Lumi and writes content-only packages. The destination must already have
-the required libraries. Public CLI/MCP export still uses the existing backend;
-see [native backend contract](docs/architecture/011-native-content.md) for the
-API, HTML policy, manifests and validation limits.
+Public native preparation/export and persistent CLI/MCP/HTTP workflows use the
+native backend. Native and stored exports include libraries; source build/rebuild
+remain content-only. Persistent source authoring uses prepare_stored_h5p_source
+with uploaded asset IDs. Old preparations require explicit re-preparation;
+existing stored artifacts remain readable. See [data transition](docs/architecture/013-native-transition.md)
+and [native backend contract](docs/architecture/011-native-content.md).
 
 ## Workflow
 
@@ -93,7 +94,7 @@ not JSON Schema. One-field groups use the child value directly, for example
 
 Use `{"path":"asset:diagram","mime":"image/png"}` in a native image/file field
 and `assets={"diagram":"C:/absolute/diagram.png"}` at activity level. Audio/video
-fields contain lists of media objects. Lumi checks formats, determines image
+fields contain lists of media objects. The native backend checks formats, determines image
 dimensions and embeds files, preserving source files. Missing and unreferenced
 asset mappings are rejected. Remote HTTP(S) media remain URLs and need network
 access during playback. Core 1.28 may reject SVG/office attachments by default.
@@ -106,11 +107,11 @@ feedback for delimiters and returns a `mathematics` report during creation.
 Unicode text such as `kg/m³` is not automatically converted to LaTeX.
 
 Install the official [MathDisplay addon](https://h5p.org/mathematical-expressions)
-explicitly with `h5p-mcp --setup-lumi --lumi-package <absolute path>`.
+explicitly with `h5p-mcp admin package <absolute path>`.
 It is an addon, not a runnable Hub activity. Missing MathDisplay blocks LaTeX
 authoring/export with setup instructions; export never downloads it. When math
 is detected, exports include `H5P.MathDisplay 1.0` as an explicit preloaded
-dependency and package its installed files through Lumi. Content without LaTeX
+dependency and package its installed files in full export mode. Content without LaTeX
 does not gain that dependency.
 
 Keep mathematical answer tokens in Blanks, DragText and MarkTheWords plain when
@@ -345,7 +346,7 @@ limit. An export larger than that limit still succeeds and remains on disk.
 Binary resource reads verify size/digest and default to 16 MiB of raw package
 bytes (`H5P_MCP_MAX_RESOURCE_BYTES`) for both local and persistent artifacts,
 independently of `H5P_MCP_MAX_OUTPUT_BYTES`. Base64 adds transport overhead;
-HTTP also caps the full MCP response at 16 MiB. Use the authenticated
+Stdio clients must allow the base64 envelope too (the harness uses a 32 MiB receive buffer for the 16 MiB raw limit). HTTP also caps the full MCP response at 16 MiB. Use the authenticated
 `/artifacts/<object_id>` route for large remote artifacts.
 
 The local registry retains 128 artifacts by default (`H5P_MCP_MAX_ARTIFACTS`).

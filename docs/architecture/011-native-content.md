@@ -1,4 +1,4 @@
-# Native content-only backend (M1)
+# Native content backend
 
 The trusted-host Engine API accepts `backend: 'native-content'` for `prepare` and
 `export`. It runs without Lumi. It uses the existing worker isolation, snapshot
@@ -17,15 +17,14 @@ const exported = await engine.run({
 
 This is the internal host API used by the local JSON authoring tools and CLI
 compile/check/build commands described in [JSON authoring](012-json-authoring.md).
-The existing public export continues to include libraries through the legacy
-backend. Selecting native-content is explicit; failure never falls back to Lumi.
+Public and stored export now use this backend and include libraries by default. Explicit native-content requests retain their content-only default. Failure never falls back to Lumi.
 Only prepare/export are supported by this backend. Administration and import
 remain separate capabilities.
 
 ## Output and dependencies
 
 The ZIP contains `h5p.json`, `content/content.json` and verified local media under
-`content/media/`. It contains no library directories: the destination must already
+`content/media/`. In content-only mode it contains no library directories: the destination must already
 have the exact required library major/minor versions and compatible Core. Absence
 of a destination inventory is not evidence of compatibility. A lock/file digest
 records the patch used for construction; it does not freeze the platform patch.
@@ -69,10 +68,7 @@ this policy; no automatic repair or symbolic answer evaluation occurs.
 The policy is intentionally independent of Lumi's SemanticsEnforcer. Accepted
 baseline corpus content is checked for preservation; accepting every editor widget
 or legacy style combination is not promised. Public preparation now uses this
-policy too. While full export still uses Lumi, it audits the legacy sanitizer before saving
-and rejects transformations before publication. This transitional export-only check
-does not restrict legitimate image dimensions or stored media paths. Widget
-business logic and accessibility still require type-specific and destination testing.
+policy for prepare and full export. Widget business logic and accessibility still require type-specific and destination testing.
 
 ## Manifest and evidence limits
 
@@ -129,7 +125,7 @@ reference; loopback protocol tests do not claim a live Hub acceptance test.
 Generic native authoring remains available. Unknown field types, sanitizer changes,
 missing exact dependencies and incompatible Core fail explicitly; editor-widget
 business rules, services used during playback, accessibility and Moodle grading
-remain destination checks. Public prepare/export transport migration remains M5;
+remain destination checks. Public prepare/export and stored source authoring now use this backend;
 the native backend already provides both content-only and full-library export.
 
 Library installation admits the documented resource extensions and license/notice

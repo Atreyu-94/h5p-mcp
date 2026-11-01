@@ -15,7 +15,13 @@ export_h5p_activity → validate_h5p_package. Read schemas for nested libraries.
 Deliver the artifact resource; distinguish structural checks from actual Moodle
 playback, accessibility and grading. Never invent a passed check.
 
-For persistent, reproducible authoring, prefer prepare_stored_h5p_activity and
+For pinned TrueFalse, MultiChoice, QuestionSet, Blanks and Accordion authoring,
+read h5p-authoring://v1/schema, adapters and examples. Local compile_h5p_source
+and check_h5p_source inspect the result; build_h5p_source exports content-only
+and requires exact destination libraries. JSON and YAML CLI inputs share the
+same source model. For persistent source authoring in stdio or HTTP, use
+prepare_stored_h5p_source with uploaded asset IDs, then export the preparation
+as a full package. For advanced native content, use prepare_stored_h5p_activity and
 export_prepared_h5p_activity. Upload local media with upload_h5p_asset first;
 use its object_id in the activity assets map. Read workflow.md for IDs,
 idempotency, target inventories and validation. Legacy local tools remain valid.
