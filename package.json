@@ -9,7 +9,7 @@
     "h5p-mcp-bun": "dist/core/cli.js"
   },
   "files": ["dist/core", "h5p_mcp/contracts/*.json", ".agents/skills/h5p-authoring", "h5p_mcp/lumi/*.cjs", "h5p_mcp/lumi/*.json", "h5p_mcp/lumi/*.tgz", "LICENSE*", "NOTICE*"],
-  "packageManager": "bun@1.4.2",
+  "packageManager": "bun@1.4.4",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
@@ -18,16 +18,16 @@
     "lint": "oxlint --deny-warnings src tests/core"
   },
   "dependencies": {
-    "@lumieducation/h5p-server": "file:h5p_mcp/lumi/lumieducation-h5p-server-10.0.4-h5pmcp.efcfeebc.tgz",
-    "@modelcontextprotocol/hono": "2.0.0",
-    "@modelcontextprotocol/server": "2.0.0",
+    "@lumieducation/h5p-server": "file:h5p_mcp/lumi/lumieducation-h5p-server-10.0.4-h5pmcp.493cd3ee.tgz",
+    "@modelcontextprotocol/hono": "2.0.2",
+    "@modelcontextprotocol/server": "2.4.0",
     "ajv": "8.20.0",
-    "hono": "4.13.8",
-    "jose": "6.2.12"
+    "hono": "4.13.14",
+    "jose": "6.2.14"
   },
   "devDependencies": {
-    "@types/bun": "1.4.2",
+    "@types/bun": "1.4.4",
     "typescript": "7.0.2",
-    "oxlint": "1.83.0"
+    "oxlint": "1.90.0"
   }
 }

@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$revision = 'efcfeebc6d7ae349f4fb708e2f44284151f77558'
+$revision = '493cd3ee5c9a9b7dddaa6c6ce95750f92485dead'
 $url = "https://api.github.com/repos/Lumieducation/H5P-Nodejs-library/zipball/$revision"
 # Always use a fresh checkout from the pinned URL; never label arbitrary local code with this SHA.
 $stage = Join-Path ([IO.Path]::GetTempPath()) ('lumi-build-' + [guid]::NewGuid().ToString('N'))
@@ -24,12 +24,12 @@ try {
     $config.extends = './tsconfig.upstream.json'
     $config | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $package 'tsconfig.build.json') -Encoding utf8NoBOM
     $manifest = Get-Content -LiteralPath (Join-Path $package 'package.json') -Raw | ConvertFrom-Json
-    $manifest.version = '10.0.4-h5pmcp.efcfeebc'
+    $manifest.version = '10.0.4-h5pmcp.493cd3ee'
     $manifest.files += @('src/', 'tsconfig.build.json', 'tsconfig.upstream.json', 'LICENSE')
     $manifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $package 'package.json') -Encoding utf8NoBOM
     & $npm pack $package --ignore-scripts --pack-destination $PSScriptRoot --quiet
     if ($LASTEXITCODE) { throw 'npm pack failed' }
-    $archive = 'lumieducation-h5p-server-10.0.4-h5pmcp.efcfeebc.tgz'
+    $archive = 'lumieducation-h5p-server-10.0.4-h5pmcp.493cd3ee.tgz'
     @{
         repository = 'https://github.com/Lumieducation/H5P-Nodejs-library'
         commit = $revision

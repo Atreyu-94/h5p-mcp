@@ -120,7 +120,7 @@ refresh tool discovery after restarting.
 
 ## Installation
 
-Requires Bun 1.4.2. Python, uv, Node and npm are not product runtime dependencies.
+Requires Bun 1.4.4. Python, uv, Node and npm are not product runtime dependencies.
 
 ```powershell
 bun install --frozen-lockfile --ignore-scripts
@@ -185,11 +185,17 @@ Import validation is not playback, accessibility or grade-transfer testing.
 Check those in the target Moodle, whose Core and permissions must accommodate the
 packaged libraries.
 
-Lumi is pinned to upstream commit `efcfeebc6d7ae349f4fb708e2f44284151f77558`,
+Lumi is pinned to upstream commit `493cd3ee5c9a9b7dddaa6c6ce95750f92485dead`,
 supporting Core 1.28.0. This is an interim development build, not an official stable
 release. `h5p_mcp/lumi/provenance.json` records source and checksum;
 `build-upstream.ps1` rebuilds the bundled archive. This does not upgrade Lumi
 Desktop or Moodle Core.
+
+The pinned development build rejects imports whose library dependencies are neither
+bundled nor installed at the exact required major/minor version. A newer minor
+version does not satisfy an older dependency. Some Hub packages therefore require
+installing their missing dependencies first. See the
+[upstream dependency-validation documentation](https://github.com/Lumieducation/H5P-Nodejs-library/blob/493cd3ee5c9a9b7dddaa6c6ce95750f92485dead/docs/development/decisions/0001-library-dependency-validation.md).
 
 ## Development checks
 

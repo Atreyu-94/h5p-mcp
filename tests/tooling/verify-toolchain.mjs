@@ -16,5 +16,5 @@ assert.equal(clean.status,0,clean.stdout+clean.stderr);
 const invalid=run('node_modules/oxlint/bin/oxlint',['--type-aware','lint-negative.fixture.ts']);
 assert.notEqual(invalid.status,0,'Negative lint fixture unexpectedly passed');
 assert.match(invalid.stdout+invalid.stderr,/no-floating-promises/);
-console.log(JSON.stringify({typescript:'7.0.2',oxlint:'1.83.0',tsgolint:'7.0.2002',
+console.log(JSON.stringify({typescript:'7.0.2',oxlint:'1.90.0',tsgolint:'7.0.2005',
   domain_types:'passed',adapter_types:'passed',lint:'passed',negative_typed_rule:'passed',eslint_absent:'passed'}));

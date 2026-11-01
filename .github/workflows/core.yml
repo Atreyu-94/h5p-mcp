@@ -19,7 +19,7 @@ jobs:
           node-version: '24.21.0'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: '1.4.2'
+          bun-version: '1.4.4'
       - run: |
           bun install --frozen-lockfile --ignore-scripts
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -41,6 +41,8 @@ jobs:
       - name: Verify F4/F5/F6 installed package, SDK clients and HTTP conformance subset
         run: |
           npm ci --prefix tests/tooling --ignore-scripts
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/tooling/verify-toolchain.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $report=Get-Content retirement-parity.json -Raw | ConvertFrom-Json
           ./tests/tooling/package-probe.ps1 -Bun (Get-Command bun).Source -Libraries (Join-Path $report.artifacts 'data/libraries')

@@ -1,10 +1,10 @@
 {
-  "sha256": "ac81c65d876aa013591add8de83ad05e8354bdd12e893fe86979371af11d0dd0",
-  "license": "GPL-3.0-or-later",
-  "commit": "efcfeebc6d7ae349f4fb708e2f44284151f77558",
-  "source_url": "https://api.github.com/repos/Lumieducation/H5P-Nodejs-library/zipball/efcfeebc6d7ae349f4fb708e2f44284151f77558",
+  "source_url": "https://api.github.com/repos/Lumieducation/H5P-Nodejs-library/zipball/493cd3ee5c9a9b7dddaa6c6ce95750f92485dead",
+  "archive": "lumieducation-h5p-server-10.0.4-h5pmcp.493cd3ee.tgz",
   "modifications": "Package version and source inclusion only; runtime source unchanged.",
-  "core": "1.28.0",
   "repository": "https://github.com/Lumieducation/H5P-Nodejs-library",
-  "archive": "lumieducation-h5p-server-10.0.4-h5pmcp.efcfeebc.tgz"
+  "commit": "493cd3ee5c9a9b7dddaa6c6ce95750f92485dead",
+  "sha256": "862a03d47742b44554d9c49dfea80fe244def799a8a2def796a9b1871d78d148",
+  "license": "GPL-3.0-or-later",
+  "core": "1.28.0"
 }
