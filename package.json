@@ -1,5 +1,5 @@
 {
-  "name": "h5p-mcp-core",
+  "name": "h5p-mcp",
   "version": "0.1.0",
   "private": true,
   "bundledDependencies": ["@lumieducation/h5p-server"],

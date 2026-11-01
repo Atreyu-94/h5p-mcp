@@ -29,7 +29,7 @@ Bun intentaba resolver esa referencia incluso con bundledDependencies. Se incluy
 provenance, fuentes del tarball Lumi, licencias, recursos y dist; no archivos Python.
 
 ```powershell
-bun x --bun --package C:/ruta/h5p-mcp-core-0.1.0.tgz h5p-mcp-bun stdio
+bun x --bun --package C:/ruta/h5p-mcp-0.1.0.tgz h5p-mcp-bun stdio
 ```
 
 Es un tarball local, no una versión disponible en npm. No usar directamente

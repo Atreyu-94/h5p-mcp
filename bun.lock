@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "h5p-mcp-core",
+      "name": "h5p-mcp",
       "dependencies": {
         "@lumieducation/h5p-server": "file:h5p_mcp/lumi/lumieducation-h5p-server-10.0.4-h5pmcp.493cd3ee.tgz",
         "@modelcontextprotocol/hono": "2.0.2",

@@ -1,4 +1,4 @@
-# H5P MCP authoring
+# H5P MCP
 
 Create H5P activities through Bun, the official MCP SDK and Lumi, using each installed content
 type's native schema instead of four fixed quiz templates.
@@ -132,7 +132,7 @@ For a standalone local tarball, run `bun tests/tooling/pack.mjs C:/output`
 after building, then:
 
 ```powershell
-bun x --bun --package C:/output/h5p-mcp-core-0.1.0.tgz h5p-mcp stdio
+bun x --bun --package C:/output/h5p-mcp-0.1.0.tgz h5p-mcp stdio
 ```
 
 The package is private and has not been published to npm. Both bin names,
@@ -158,7 +158,7 @@ works after upgrading; freeze it at commit
 `4d721aef540dd088d82db7799eac946499194033` (tag `python-final-f4`) for rollback:
 
 ```powershell
-uvx --from "git+https://github.com/Atreyu-94/H5P_MCP.git@4d721aef540dd088d82db7799eac946499194033" h5p-mcp
+uvx --from "git+https://github.com/Atreyu-94/h5p-mcp.git@4d721aef540dd088d82db7799eac946499194033" h5p-mcp
 ```
 
 ## Educational skill

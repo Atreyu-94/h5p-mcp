@@ -7,7 +7,7 @@ import type {Native} from '../domain/types.js';
 const params={'~standard':{version:1 as const,vendor:'h5p',validate(value:unknown){return value&&typeof value==='object'?{value}:{issues:[{message:'Expected object'}]};}}};
 /** Shared registration; transport lifetime and principal are supplied by the host. */
 export function mcp(service:Service,shutdown:AbortSignal,pending:Set<Promise<unknown>>) {
- const server=new Server({name:'h5p-mcp-core',version:'0.1.0'},{capabilities:{tools:{},resources:{},extensions:{[extensionID]:{}}}});
+ const server=new Server({name:'h5p-mcp',title:'H5P MCP',version:'0.1.0'},{capabilities:{tools:{},resources:{},extensions:{[extensionID]:{}}}});
  server.setRequestHandler('tools/list',async request=>{
   if(request.params?.cursor!==undefined)throw new ProtocolError(-32602,'Unknown tools cursor');
   return {tools:service.tools()};
