@@ -41,6 +41,8 @@ test('Lumi exports the exact main-library embed modes and falls back to div when
    }}finally{await exported.close();}
    expect(packaged.embedTypes).toEqual(modes||['div']);
    expect(packaged.mainLibrary).toBe('H5P.TrueFalse');
+   const imported=await isolated({action:'validate',data_dir:root,path:output},AbortSignal.timeout(30000)) as Native;
+   expect(imported.ok).toBe(true);
   }
  }finally{await fs.rm(root,{recursive:true,force:true});}
-},60000);
+},150000);

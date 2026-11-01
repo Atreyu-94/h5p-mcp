@@ -27,7 +27,8 @@ export async function execute(request: CoreRequest): Promise<unknown> {
  try {
   const editor=await editorAt(job,request.action==='validate'?path.join(job,'libraries'):libraries,request.action==='export');
   if(request.action==='catalog') return {libraries:await catalog(editor),core:editor.config.h5pVersion};
-  if(request.action==='validate') return validate(editor,request.path!);
+  // Await import before finally removes the job's library and temporary stores.
+  if(request.action==='validate') return await validate(editor,request.path!);
   if(request.action!=='prepare'&&request.action!=='export') throw new Error('Unknown action');
   const report=await prepare(editor,request,libraries);
   return request.action==='prepare'?report:await exportActivity(editor,request,libraries,report);
