@@ -15,7 +15,8 @@ const exported = await engine.run({
 });
 ```
 
-This is an internal host API. MCP/CLI authoring interfaces are a later increment.
+This is the internal host API used by the local JSON authoring tools and CLI
+compile/check/build commands described in [JSON authoring](012-json-authoring.md).
 The existing public export continues to include libraries through the legacy
 backend. Selecting native-content is explicit; failure never falls back to Lumi.
 Only prepare/export are supported by this backend. Administration and import
@@ -60,7 +61,7 @@ attributes are outside this initial policy, even when a library/editor allows th
 Any sanitizer change returns CONTENT_TRANSFORMATION_REQUIRED and a proposed
 before/after value with a JSON Pointer. The input is not rewritten. The public
 v1 diagnostic maps this code to SCHEMA_VALIDATION_FAILED. Raw proposals remain
-internal until the richer reporting contract is exposed. HTML maxLength is now
+available through the bounded report_version 2 extension. HTML maxLength is now
 an explicit rejection, not silent truncation. Plain scalar length/regexp checks
 remain unchanged. LaTeX and answers must be resubmitted explicitly if they violate
 this policy; no automatic repair or symbolic answer evaluation occurs.

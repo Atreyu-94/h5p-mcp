@@ -17,7 +17,7 @@ export class Engine {
     const pinned={...request,data_dir:snapshot.root};
     // Keep untrusted semantics/ZIP work killable; persistent queries share the bounded schema cache.
     if(request.action==='export') return await publish(pinned,signal);
-    if(['prepare','validate'].includes(request.action)) return await isolated(pinned,signal);
+    if(['compile','prepare','validate'].includes(request.action)) return await isolated(pinned,signal);
     // Load the editor only for execution, not MCP discovery or isolated jobs.
     const {execute}=await import('./execute.js');
     return await execute(pinned);

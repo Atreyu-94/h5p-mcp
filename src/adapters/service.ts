@@ -11,7 +11,7 @@ import type {CoreRequest,Native} from '../domain/types.js';
 import {checkTree,limit} from '../domain/limits.js';
 import {projectSemantics} from '../domain/contracts.js';
 import {Resources,hash,canonical} from './resources.js';
-import {base,operations,codes,examples,storage,schema,valid,invalidInput,report,failure,diagnostic,verification} from './contracts.js';
+import {base,operations,codes,examples,storage,authoring,authoringAdapters,authoringExamples,schema,valid,invalidInput,report,failure,diagnostic,verification} from './contracts.js';
 const scopes:Record<string,string>={refresh_h5p_catalog:'catalog:refresh',install_h5p_library:'libraries:install',install_h5p_library_package:'libraries:install',capture_h5p_library_snapshot:'libraries:install',activate_h5p_library_snapshot:'libraries:install'};
 export const aliases:Record<string,string>={list_h5p_activities:'search_h5p_types',get_h5p_activity_schema:'get_h5p_type_contract',create_h5p_activity:'prepare_h5p_activity',export_h5p:'export_h5p_activity',validate_h5p:'validate_h5p_package'};
 async function resolved(filename:string):Promise<string> {
@@ -71,6 +71,10 @@ export class Service {
    this.roots[kind]=await Promise.all(roots.map(r=>resolved(r)));
   }
   await this.resources.initialize();
+  for(const [name,value] of Object.entries({schema:authoring,adapters:authoringAdapters,examples:authoringExamples})) {
+   const uri='h5p-authoring://v1/'+name;
+   this.resources.texts.set(uri,{uri,name:'authoring-'+name,mimeType:'application/json',text:JSON.stringify(value)});
+  }
   for(const [name,value] of Object.entries({schema:base,codes,profiles:operations,storage})) {
    const uri='h5p-contract://v1/'+name;
    this.resources.texts.set(uri,{uri,name,mimeType:'application/json',text:JSON.stringify(value)});
@@ -81,7 +85,7 @@ export class Service {
   const tools:Native[]=Object.entries(this.definitions).filter(([name])=>this.allowed(name)).map(([name,[input,output]])=>({
    name,description:descriptions[name],inputSchema:schema(input),
    outputSchema:output==='preparation_report'||output==='operation_report'?schema(output):{type:'object',anyOf:[schema(output),schema('error_report')]},
-   annotations:{readOnlyHint:['search_h5p_types','get_h5p_type_contract','validate_h5p_package','validate_stored_h5p_package','list_stored_h5p_objects'].includes(name),destructiveHint:name==='revoke_stored_h5p_object',openWorldHint:!!scopes[name]}
+   annotations:{readOnlyHint:['compile_h5p_source','check_h5p_source','search_h5p_types','get_h5p_type_contract','validate_h5p_package','validate_stored_h5p_package','list_stored_h5p_objects'].includes(name),destructiveHint:name==='revoke_stored_h5p_object',openWorldHint:!!scopes[name]}
   }));
   for(const [name,target] of Object.entries(aliases)) {
    if(!Object.hasOwn(this.definitions,target))continue;
@@ -102,6 +106,12 @@ export class Service {
   const result=await this.engine.run({action,data_dir:this.data,...args},signal);
   if(action==='setup'||args.install_if_missing)await (await this.vault()).snapshot(true,signal);
   return result;
+ }
+ async destination(outputName:string) {
+  await this.authorize(this.exportDir,'EXPORT');await fs.mkdir(this.exportDir,{recursive:true});
+  const directory=await this.authorize(this.exportDir,'EXPORT');
+  const filename=(outputName.replace(/[^A-Za-z0-9._-]/g,'_').replace(/^[._-]+|[._-]+$/g,'')||'export').replace(/\.h5p$/i,'')+'.h5p';
+  return path.join(directory,filename);
  }
  async dispatch(name:string,args:Native,signal:AbortSignal):Promise<Native> {
   if(!this.allowed(name)) throw failure('PERMISSION_DENIED');
@@ -132,6 +142,18 @@ export class Service {
    const filename=await this.authorize(args.path,'PACKAGE');
    return this.run('setup',{packages:[filename]},signal);
   }
+  if(['compile_h5p_source','check_h5p_source','build_h5p_source'].includes(name)) {
+   const compiled=await this.run('compile',{source:args.source},signal);
+   const result:Native={...report(compiled.ok?'compilation':'validation',compiled.ok,compiled.diagnostics,{structure:compiled.ok?'passed':'failed',semantics:compiled.ok?'passed':'failed'}),...feedback(compiled),source_map:compiled.source_map,identities:compiled.identities,activity:compiled.ok?compiled.activity:null};
+   if(compiled.ok)result.normalized=compiled.normalized;
+   if(name==='build_h5p_source'&&compiled.ok){
+    const destination=await this.destination(args.output_name);
+    const exported=await this.run('export',{backend:'native-content',activity:compiled.activity,path:destination},signal);
+    result.artifact=await this.resources.artifact(destination,{h5p:exported.h5p_json,preparation:exported.preparation_manifest,export_mode:'content-only'},exported.content_json);
+    result.export_mode='content-only';
+   }
+   return result;
+  }
   if(name==='prepare_h5p_activity') {
    const result=await this.run('prepare',{activity:{language:'en',license:'U',assets:{},...args}},signal);
    return {...report(result.ok?'preparation':'validation',result.ok,result.diagnostics,{structure:result.ok?'passed':'failed',semantics:result.ok?'passed':'failed'}),...feedback(result),activity:result.ok?result.activity:null};
@@ -142,11 +164,7 @@ export class Service {
    return report('validation',true,[],{structure:'passed',importation:'passed'});
   }
   if(name==='export_h5p_activity') {
-   await this.authorize(this.exportDir,'EXPORT');
-   await fs.mkdir(this.exportDir,{recursive:true});
-   const directory=await this.authorize(this.exportDir,'EXPORT');
-   const filename=(args.output_name.replace(/[^A-Za-z0-9._-]/g,'_').replace(/^[._-]+|[._-]+$/g,'')||'export').replace(/\.h5p$/i,'')+'.h5p';
-   const destination=path.join(directory,filename);
+   const destination=await this.destination(args.output_name);
    const result=await this.run('export',{activity:{language:'en',license:'U',assets:{},...args.activity},path:destination},signal);
    const artifact=await this.resources.artifact(destination,{h5p:result.h5p_json,preparation:result.preparation_manifest},result.content_json);
    return {...report('export',true,[],{structure:'passed',semantics:'passed'}),artifact};
@@ -171,7 +189,8 @@ export class Service {
   try {
    checkTree(args);
    if(!definition) throw failure('SCHEMA_VALIDATION_FAILED');
-   if(!valid(definition[0],args)) throw invalidInput(definition[0]);
+   const inputDefinition=['compile_h5p_source','check_h5p_source'].includes(name)?'authoring_envelope_input':name==='build_h5p_source'?'authoring_build_envelope_input':definition[0];
+   if(!valid(inputDefinition,args)) throw invalidInput(inputDefinition);
    result=await this.dispatch(name,args,signal);
    if(!valid(definition[1],result)) throw failure('INTERNAL_ERROR');
    if(Buffer.byteLength(JSON.stringify(result))>limit('OUTPUT_BYTES',16777216)) throw failure('LIMIT_EXCEEDED');

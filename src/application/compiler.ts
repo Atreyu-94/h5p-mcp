@@ -66,7 +66,7 @@ export async function compileSource(source:Native,libraries:string) {
   if(source.feedback)params.overallFeedback=[{from:0,to:99,feedback:text(source.feedback.incorrect,'/feedback/incorrect','/params/overallFeedback/0/feedback')},{from:100,to:100,feedback:text(source.feedback.correct,'/feedback/correct','/params/overallFeedback/1/feedback')}];
  }
  async function translations(schema:Native[],version:string,target:Native,roots:string[],prefix:string){
-  let translated:Native[]=[];
+  let translated:Native[]=[],missingDefault=false;
   if(normalized.ui.language!=='en'){
    try{const value=await repo.getTranslation(libraryVersion(version),normalized.ui.language);if(!Array.isArray(value.semantics))throw new Error();translated=value.semantics;}
    catch{if(normalized.ui.missing==='error')error('/ui/language','translation','adapter');else warnings.push('Translation unavailable for '+version+'; using English defaults.');}
@@ -78,11 +78,13 @@ export async function compileSource(source:Native,libraries:string) {
     else if(entry.type==='text'&&typeof entry.default==='string'){
      out[entry.name]=typeof local?.[i]?.default==='string'?local[i].default:entry.default;sourceMap[here]='/ui/language';
      const key=here.slice('/params/'.length);
+     if(translated.length&&typeof local?.[i]?.default!=='string'&&!Object.hasOwn(normalized.ui.overrides,key))missingDefault=true;
      if(Object.hasOwn(normalized.ui.overrides,key)){out[entry.name]=normalized.ui.overrides[key];sourceMap[here]='/ui/overrides/'+escape(key);usedOverrides.add(key);}
     }
    });
   }
   schema.forEach((entry,i)=>{if(roots.includes(entry.name)){if(entry.type==='group'){target[entry.name]??={};fill(entry.fields||[],translated[i]?.fields||[],target[entry.name],prefix+'/'+entry.name);}else fill([entry],[translated[i]],target,prefix);}});
+  if(missingDefault){if(normalized.ui.missing==='error')error('/ui/language','translation','adapter');else warnings.push('Translation unavailable for some interface fields in '+version+'; using English defaults.');}
  }
  const usedOverrides=new Set<string>();
  await translations(fields!,source.library.name,params,source.type==='true_false'?['l10n','confirmCheck','confirmRetry']:['UI','confirmCheck','confirmRetry'],'/params');

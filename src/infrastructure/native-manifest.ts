@@ -1,3 +1,4 @@
+import {repositoryRoot} from './runtime.js';
 import {createRequire} from 'node:module';
 import {resolveLibraries} from '../h5p/dependencies.js';
 import {FileLibraryRepository} from '../h5p/libraries.js';
@@ -37,6 +38,7 @@ export async function nativeManifest(root: string, activity: Activity, mathemati
   const assets: Record<string,string> = {};
   for (const [id, file] of Object.entries(activity.assets || {})) assets[id] = await digestFile(file);
   const backend: Record<string,string> = {};
+  for(const name of ['authoring-v1.json','authoring-adapters-v1.json'])backend['contract/'+name]=hash(await fs.readFile(path.join(repositoryRoot,'h5p_mcp/contracts',name)));
   const load=createRequire(import.meta.url);
   for(const name of ['sanitize-html','magic-bytes.js','yazl','yauzl-promise','@node-rs/crc32','probe-image-size'])
     backend['package/'+name]=hash(await fs.readFile(load.resolve(name+'/package.json')));

@@ -35,6 +35,11 @@ or promise byte-identical ZIPs. Local files are checked again after export, befo
 exclusive publication. Concurrent hostile filesystem modification is outside
 this local author's trust model; hashes are not filesystem isolation.
 
+The additive report_version 2 extension preserves bounded warnings, mathematical
+requirements and transformation proposals in local and persistent preparation.
+Compiler diagnostics use source pointers and explicit stages. See
+[JSON authoring](docs/architecture/012-json-authoring.md) for limits and contracts.
+
 Reports expose `verification`: structure, semantics, importation, playback and
 grading each use `passed`, `failed` or `not_run`. Export does not itself run an
 import, browser or Moodle grading test. MCP clients expose the JSON dictionary

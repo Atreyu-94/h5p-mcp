@@ -599,6 +599,195 @@
           "$ref": "#/$defs/opaque_id"
         }
       }
+    },
+    "authoring_compile_input": {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/authoring_source"
+        }
+      },
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "authoring_build_input": {
+      "properties": {
+        "output_name": {
+          "minLength": 1,
+          "type": "string",
+          "maxLength": 200
+        },
+        "source": {
+          "$ref": "#/$defs/authoring_source"
+        }
+      },
+      "type": "object",
+      "required": [
+        "source",
+        "output_name"
+      ],
+      "additionalProperties": false
+    },
+    "authoring_report": {
+      "properties": {
+        "report_version": {
+          "const": "2"
+        },
+        "transformations": {
+          "maxItems": 100,
+          "items": {
+            "additionalProperties": false,
+            "required": [
+              "pointer",
+              "before",
+              "after",
+              "truncated"
+            ],
+            "properties": {
+              "truncated": {
+                "type": "boolean"
+              },
+              "after": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "pointer": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "before": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/diagnostic"
+          }
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "identities": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "normalized": {
+          "type": "object"
+        },
+        "activity": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "warnings_truncated": {
+          "type": "boolean"
+        },
+        "contract_version": {
+          "const": "1"
+        },
+        "warnings": {
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "type": "array"
+        },
+        "verification": {
+          "$ref": "#/$defs/verification"
+        },
+        "export_mode": {
+          "const": "content-only"
+        },
+        "kind": {
+          "enum": [
+            "compilation",
+            "validation",
+            "operational_error"
+          ]
+        },
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "diagnostics_truncated": {
+          "type": "boolean"
+        },
+        "mathematics": {
+          "additionalProperties": false,
+          "required": [
+            "detected"
+          ],
+          "properties": {
+            "detected": {
+              "type": "boolean"
+            },
+            "installed": {
+              "type": "boolean"
+            },
+            "library": {
+              "const": "H5P.MathDisplay 1.0"
+            }
+          },
+          "type": "object"
+        },
+        "source_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "transformations_truncated": {
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "required": [
+        "contract_version",
+        "ok",
+        "kind",
+        "diagnostics",
+        "diagnostics_truncated",
+        "verification"
+      ],
+      "additionalProperties": false
+    },
+    "authoring_envelope_input": {
+      "properties": {
+        "source": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "authoring_build_envelope_input": {
+      "properties": {
+        "output_name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "output_name"
+      ],
+      "type": "object"
     }
   },
   "local": {
@@ -633,6 +822,18 @@
     "export_h5p_batch": [
       "batch_input",
       "batch_output"
+    ],
+    "compile_h5p_source": [
+      "authoring_compile_input",
+      "authoring_report"
+    ],
+    "check_h5p_source": [
+      "authoring_compile_input",
+      "authoring_report"
+    ],
+    "build_h5p_source": [
+      "authoring_build_input",
+      "authoring_report"
     ]
   },
   "remote": {

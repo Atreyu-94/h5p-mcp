@@ -5,6 +5,12 @@ type's native schema instead of four fixed quiz templates.
 
 ## Native content backend
 
+JSON authoring is available through local MCP `compile_h5p_source`, `check_h5p_source`
+and `build_h5p_source`, or CLI `compile`, `check` and `build`. It supports pinned
+TrueFalse/MultiChoice sources and exports content-only packages without Lumi.
+See [JSON authoring v1](docs/architecture/012-json-authoring.md) for schema, examples,
+scoring, translations and destination requirements.
+
 An explicit internal `backend: 'native-content'` prepare/export path now runs
 without Lumi and writes content-only packages. The destination must already have
 the required libraries. Public CLI/MCP export still uses the existing backend;
@@ -293,7 +299,8 @@ network access. Its `fields` retain order, names, types, native required flags,
 defaults and constraints. `x-h5p` retains widget/extension metadata and explains
 limits. Groups with `value_shape: "single_field"` use the child's value directly.
 This format is not JSON Schema and does not certify editor business logic.
-Labels, descriptions and UI grouping flags are available in the raw resource.
+Compact labels and descriptions are bounded to 1024 characters with truncation
+flags. Complete text and UI grouping flags remain available in the raw resource.
 
 `raw_schema` returns a URI, SHA-256, MIME and byte length of a canonical UTF-8
 JSON snapshot containing complete native semantics and library metadata. The

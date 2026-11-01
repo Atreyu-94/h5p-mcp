@@ -10,6 +10,7 @@ configureLimits(process.env);
 export async function execute(request: CoreRequest): Promise<unknown> {
  checkTree(request);
  if(!path.isAbsolute(request.data_dir)) throw new Error('Absolute data_dir required');
+ if(request.action==='compile'){const {compileSource}=await import('./compiler.js');return compileSource(request.source,path.join(request.data_dir,'libraries'));}
  if(request.backend==='native-content'){const {executeNative}=await import('../h5p/native-content.js');return executeNative(request);}
  if(request.action==='inspect-archive'){await preflight(request.path!);return {ok:true};}
  const {editorAt}=await import('../h5p/editor.js');

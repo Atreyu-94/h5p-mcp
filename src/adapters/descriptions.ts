@@ -1,4 +1,7 @@
 export const descriptions:Record<string,string>={
+ compile_h5p_source:'Compile one versioned JSON source to a prepared native activity using pinned adapters and libraries. Returns source diagnostics, stable identities and a source map; no Lumi or installation.',
+ check_h5p_source:'Check a versioned JSON source and its installed dependencies without writing a package. Uses the same independent compiler as build.',
+ build_h5p_source:'Compile a versioned JSON source and export content/verified media without Lumi. Destination must already have exact libraries; never overwrites a package.',
  search_h5p_types:'Discover cached or installed H5P types. Hub presence is not proof of authoring or destination compatibility; use installed_only for local libraries.',
  get_h5p_type_contract:'Read installed native fields, labels, constraints and exact child versions. raw_schema links to complete semantics; no installation or download.',
  prepare_h5p_activity:'Validate native H5P params and local media against an exact installed library. Returns a prepared activity, diagnostics and proposed text changes; does not certify playback.',
