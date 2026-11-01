@@ -1,10 +1,6 @@
 import type {Native} from '../domain/types.js';
-import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import path from 'node:path';
-import os from 'node:os';
 import {createHash} from 'node:crypto';
-import {editorAt,stores,user} from './editor.js';
+import {nativeCatalog,readStore} from './native-catalog.js';
 import {checkTree,limit} from '../domain/limits.js';
 export async function catalog(editor: Native) {
   const installed = await editor.libraryManager.listInstalledLibraries();
@@ -20,20 +16,7 @@ export async function catalog(editor: Native) {
 }
 
 export async function query(request: Native) {
- const libraries=path.join(request.data_dir,'libraries');
-    // Lumi constructors create storage directories. Ordinary queries use an
-    // ephemeral configuration/cache snapshot, leaving durable state untouched.
-    const readonly = !request.refresh && !request.install_if_missing;
-    const root = readonly ? await fsp.mkdtemp(path.join(os.tmpdir(), 'h5p-query-')) : request.data_dir;
-    try {
-    if (readonly) {
-      for (const name of ['config.json', 'cache.json']) {
-        try { await fsp.copyFile(path.join(request.data_dir,name),path.join(root,name)); }
-        catch (error: Native) { if (error.code !== 'ENOENT') throw error; }
-      }
-    }
-    const libraryRoot = readonly && !fs.existsSync(libraries) ? path.join(root,'libraries') : libraries;
-    const editor = await editorAt(root, libraryRoot);
+ const root=request.data_dir,editor=await nativeCatalog(root);
     const manager = editor.libraryManager;
     let installed = await manager.listInstalledLibraries();
     const sortVersions = (versions: Native[]) => [...versions].sort((a: Native, b: Native) =>
@@ -45,7 +28,7 @@ export async function query(request: Native) {
       if (request.refresh && !await editor.contentTypeCache.forceUpdate()) throw Object.assign(new Error('H5P Hub refresh failed; retry with refresh=false to use cached data'), {code:'HUB_UNAVAILABLE'});
       // ContentTypeCache.get() downloads on a cache miss. Discovery without an
       // explicit refresh must read storage directly, including an absent cache.
-      const hub = await new stores.JsonStorage(path.join(root, 'cache.json')).load('contentTypeCache') || [];
+      const hub = (await readStore(root,'cache.json')).contentTypeCache || [];
       const entries = new Map<string,Native>(hub.map((item: Native) => [item.machineName, {
         machine_name: item.machineName, title: item.title, summary: item.summary,
         hub_version: `${item.majorVersion}.${item.minorVersion}.${item.patchVersion}`,
@@ -112,7 +95,7 @@ export async function query(request: Native) {
       if (request.major_version != null && (Number(entry.majorVersion) !== request.major_version || Number(entry.minorVersion) !== request.minor_version)) {
         throw Object.assign(new Error('Requested version is not installed and is not the current Hub version'), {code:'LIBRARY_VERSION_MISMATCH'});
       }
-      await editor.installLibraryFromHub(name, user);
+      await editor.installLibraryFromHub(name);
       installed = await manager.listInstalledLibraries();
       version = select();
     }
@@ -122,8 +105,6 @@ export async function query(request: Native) {
       patch_version: metadata.patchVersion, metadata, semantics: await manager.getSemantics(version),
       authoring_supported: Number(metadata.runnable) === 1 && compatible(metadata.coreApi?.majorVersion, metadata.coreApi?.minorVersion) !== false,
       note: 'Native H5P semantics, not JSON Schema. Nested library options refer to separate schemas; query those exact versions. Use the exact library and native params with create_h5p_activity.' };
-    } finally {
-      if (readonly) await fsp.rm(root, {recursive:true, force:true});
-    }
 
 }
+

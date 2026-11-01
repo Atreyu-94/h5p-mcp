@@ -98,3 +98,36 @@ drift before publication. Member, expanded-byte and archive-byte limits apply to
 the whole package. Public export and package installation retain their existing
 backend until the rest of their migration is complete. Full packaging does not
 certify import, playback, accessibility or grading in a destination.
+
+## M4 package operations
+
+Package validation, library installation, catalog queries, schema discovery and
+explicit Hub refresh/download now run through independent TypeScript components.
+Validation extracts into a disposable directory and never installs into the user
+store. ZIP preflight applies CRC, traversal, portable collision and byte/member
+checks before extraction. Native metadata, exact dependencies (including editor
+and dynamic roles), Core requirements, semantics and referenced media are checked.
+Packages with missing bundled dependencies fail; content-only exports require the
+destination libraries and are not self-contained import-validation inputs.
+
+Local package installation is explicit and keeps all bundled library resources.
+Existing identical libraries are reused. A different patch or different bytes at
+the same major/minor identity is rejected with LIBRARY_VERSION_MISMATCH; there is
+no silent replacement or downgrade. Resolve that conflict in an administrator's
+separate library store and activate its reviewed snapshot. Preflight and conflict
+checks precede installation. Failed disk writes may leave a partial new library;
+no transactional multi-library rollback is advertised.
+
+Hub registration/refresh is explicit, preserves the existing config/cache shapes,
+and sends no usage statistics or hardware identifier. Ordinary discovery reads
+only installed metadata and cache, including an absent cache. Downloads are bounded
+and pass the same package checks. Existing service scopes, immutable policy and
+Engine writer lock still apply. Custom endpoints are host configuration. Protocol
+references: https://github.com/h5p/h5p-php-library and the installed legacy protocol
+reference; loopback protocol tests do not claim a live Hub acceptance test.
+
+Generic native authoring remains available. Unknown field types, sanitizer changes,
+missing exact dependencies and incompatible Core fail explicitly; editor-widget
+business rules, services used during playback, accessibility and Moodle grading
+remain destination checks. Public prepare/export transport migration remains M5;
+the native backend already provides both content-only and full-library export.
