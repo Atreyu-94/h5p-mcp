@@ -24,7 +24,7 @@ export async function inspectLibraries(root:string){
   if(dir.name!==`${version.machineName}-${version.majorVersion}.${version.minorVersion}`)throw fail();
   if(typeof meta.title!=='string'||!meta.title||![0,1].includes(meta.runnable)||meta.coreApi&&(!Number.isSafeInteger(meta.coreApi.majorVersion)||meta.coreApi.majorVersion<0||!Number.isSafeInteger(meta.coreApi.minorVersion)||meta.coreApi.minorVersion<0))throw fail();
   const allowed=new Set('js css json svg png jpg jpeg gif webp eot ttf woff woff2 otf txt pdf rtf doc docx xls xlsx ppt pptx odt ods odp xml csv diff patch swf md textile map'.split(' '));
-  const resources=async(base:string):Promise<void>=>{for(const e of await fs.readdir(base,{withFileTypes:true})){const file=path.join(base,e.name);if(e.isDirectory())await resources(file);else if(!allowed.has(path.extname(e.name).slice(1).toLowerCase())&&!/^(?:LICENSE|COPYING|NOTICE)(?:[.-].*)?$/i.test(e.name))throw fail();}};
+  const resources=async(base:string):Promise<void>=>{for(const e of await fs.readdir(base,{withFileTypes:true})){const file=path.join(base,e.name);if(e.isDirectory())await resources(file);else if(!allowed.has(path.extname(e.name).slice(1).toLowerCase())&&!/^(?:LICENSE|COPYING|NOTICE)$/i.test(e.name))throw fail();}};
   await resources(path.join(root,dir.name));
   await repo.getLibrary(version);if(meta.coreApi&&(meta.coreApi.majorVersion>1||meta.coreApi.majorVersion===1&&meta.coreApi.minorVersion>28))throw fail('TARGET_INCOMPATIBLE');
   try{await repo.getSemantics(version);}catch(error:Native){if(meta.runnable||error.code!=='ENOENT')throw error;}
@@ -51,15 +51,39 @@ export async function installPackage(filename:string,data:string){return unpack(
  for(const item of libraries){const destination=path.join(target,item.folder);if(!await fs.access(destination).then(()=>true,()=>false))await fs.cp(path.join(root,item.folder),destination,{recursive:true,errorOnExist:true,force:false});}
  return {ok:true,libraries:libraries.length,engine:'native-package-v1'};
  });}
+/** Check package metadata before projecting it onto the authoring contract. */
+function validateMetadata(meta:Native){
+ if(!meta||typeof meta!=='object'||Array.isArray(meta))throw fail();
+ for(const key of ['title','language','mainLibrary'])if(typeof meta[key]!=='string'||!meta[key])throw fail();
+ if(!Array.isArray(meta.embedTypes)||!meta.embedTypes.length||meta.embedTypes.some((value:Native)=>!['div','iframe'].includes(value)))throw fail();
+ if(!Array.isArray(meta.preloadedDependencies)||!meta.preloadedDependencies.length)throw fail();
+ for(const key of ['preloadedDependencies','dynamicDependencies']){
+  if(meta[key]===undefined)continue;
+  if(!Array.isArray(meta[key]))throw fail();
+  for(const item of meta[key]){
+   if(!item||typeof item.machineName!=='string'||!Number.isSafeInteger(item.majorVersion)||item.majorVersion<0||!Number.isSafeInteger(item.minorVersion)||item.minorVersion<0)throw fail();
+   libraryVersion(item.machineName+' '+item.majorVersion+'.'+item.minorVersion);
+  }
+ }
+ // Preparation validates title, language and license values. Do not replace
+ // malformed metadata with defaults when projecting the package into an activity.
+ for(const key of ['license','licenseVersion','licenseExtras','source','author','contentType','authorComments','yearsFrom','yearsTo','w','h','metaKeywords','metaDescription','a11yTitle'])if(meta[key]!==undefined&&typeof meta[key]!=='string')throw fail();
+ for(const [key,fields] of [['authors',['name','role']],['changes',['date','author','log']]] as const){
+  if(meta[key]===undefined)continue;
+  if(!Array.isArray(meta[key])||meta[key].some((item:Native)=>!item||fields.some(field=>typeof item[field]!=='string'||!item[field])))throw fail();
+ }
+}
 export async function validatePackage(filename:string){return unpack(filename,async root=>{
  const libraries=await inspectLibraries(root),meta=await json(path.join(root,'h5p.json')),params=await json(path.join(root,'content/content.json'));
- const main=(meta.preloadedDependencies||[]).find((v:Native)=>v.machineName===meta.mainLibrary);if(!main)throw fail();
+ validateMetadata(meta);
+ const main=meta.preloadedDependencies.find((v:Native)=>v.machineName===meta.mainLibrary);if(!main)throw fail();
  const assets:Record<string,string>={};let index=0;const pending=[params];
  while(pending.length){const value=pending.pop();if(!value||typeof value!=='object')continue;if(typeof value.path==='string'&&!/^https?:\/\//i.test(value.path)){
   const relative=value.path;if(relative.includes('\\')||relative.split('/').some((p:string)=>!p||p==='..'||p==='.')||path.isAbsolute(relative))throw fail();const file=path.join(root,'content',relative);await fs.access(file);const id='package'+index++;assets[id]=file;value.path='asset:'+id;
  }pending.push(...Object.values(value));}
- const activity={title:meta.title,language:meta.language||'en',license:meta.license||'U',library:`${main.machineName} ${main.majorVersion}.${main.minorVersion}`,params,assets};
+ const activity={title:meta.title,language:meta.language,license:meta.license??'U',library:`${main.machineName} ${main.majorVersion}.${main.minorVersion}`,params,assets};
  const repo=new FileLibraryRepository(root);await resolveLibraries(repo,activity);
+ for(const item of libraries)await resolveLibraries(repo,{library:item.name,params:{}});
  for(const kind of ['preloadedDependencies','dynamicDependencies'])for(const item of meta[kind]||[])await resolveLibraries(repo,{library:`${item.machineName} ${item.majorVersion}.${item.minorVersion}`,params:{}});
  const previous=process.env.H5P_MCP_ASSET_ROOTS;process.env.H5P_MCP_ASSET_ROOTS=JSON.stringify([path.join(root,'content')]);
  try{const report=await prepareActivity({libraries:repo,coreApiVersion:{major:1,minor:28}},activity);if(!report.ok)throw Object.assign(fail(),{details:report.diagnostics});}finally{if(previous===undefined)delete process.env.H5P_MCP_ASSET_ROOTS;else process.env.H5P_MCP_ASSET_ROOTS=previous;}
