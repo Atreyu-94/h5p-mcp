@@ -154,8 +154,7 @@ bun x --bun --package C:/output/h5p-mcp-0.1.0.tgz h5p-mcp stdio
 
 The package is private and has not been published to npm. Both bin names,
 `h5p-mcp` and `h5p-mcp-bun`, execute the same Bun entry point. Do not use the
-source checkout's raw `bun pm pack`: the packaging script prepares the vendored
-Lumi dependency without a checkout-relative installation path.
+source checkout raw pack command: the packaging script selects runtime, contracts, skill and license files without development tooling.
 
 ```powershell
 $env:H5P_MCP_ADMIN_SCOPES = 'libraries:install'
@@ -202,17 +201,10 @@ Import validation is not playback, accessibility or grade-transfer testing.
 Check those in the target Moodle, whose Core and permissions must accommodate the
 packaged libraries.
 
-Lumi is pinned to upstream commit `493cd3ee5c9a9b7dddaa6c6ce95750f92485dead`,
-supporting Core 1.28.0. This is an interim development build, not an official stable
-release. `h5p_mcp/lumi/provenance.json` records source and checksum;
-`build-upstream.ps1` rebuilds the bundled archive. This does not upgrade Lumi
-Desktop or Moodle Core.
-
-The pinned development build rejects imports whose library dependencies are neither
-bundled nor installed at the exact required major/minor version. A newer minor
-version does not satisfy an older dependency. Some Hub packages therefore require
-installing their missing dependencies first. See the
-[upstream dependency-validation documentation](https://github.com/Lumieducation/H5P-Nodejs-library/blob/493cd3ee5c9a9b7dddaa6c6ce95750f92485dead/docs/development/decisions/0001-library-dependency-validation.md).
+The native backend replaces Lumi; the distribution has no Lumi dependency or bundle.
+Imports require dependencies bundled or installed at the exact major/minor version.
+A newer minor version does not satisfy an older dependency. Destination Core and
+library installation permissions must be checked separately in Moodle.
 
 ## Development checks
 
@@ -233,9 +225,7 @@ removed from main and are not the current product test command.
 
 ## License
 
-Project source: Apache 2.0. Bundled Lumi server and corresponding source:
-GPL-3.0-or-later, with LICENSE included in the npm archive. Other dependencies
-retain their authors' licenses.
+Project source: Apache 2.0. Dependencies retain their own licenses. See NOTICE.md for preserved historical attribution and fixture licensing.
 
 ## Authoring guarantees and reproducible tests
 
@@ -282,7 +272,7 @@ libraries, and never initializes npm or downloads Hub content implicitly.
 Grant either scope independently; unknown scope names fail startup.
 
 `H5P_MCP_IMMUTABLE=1` hides and rejects every administrative tool regardless of
-scopes, and disables `--setup-lumi`. Configuration is frozen at process startup.
+scopes. Configuration is frozen at process startup.
 Tool annotations do not grant permissions. Calling a hidden tool directly is
 also rejected, including through stdio. These are local host permissions, not
 OAuth or a remote multi-tenant security boundary.
@@ -358,3 +348,27 @@ are unavailable after restart; persistent IDs survive until expiry/revocation.
 Exports preserve the `embedTypes` declared by the main library, including iframe-only
 libraries; `div` is the fallback when the metadata omits that field. Package
 metadata tests do not establish browser or Moodle playback.
+
+## Independent package validation and Moodle handoff
+
+The test-only PHP adapter runs the unmodified validator from
+[h5p/h5p-php-library at 1e21b7a](https://github.com/h5p/h5p-php-library/tree/1e21b7a2da4ae9c4f1f9e61f7ae1038f8850fb82).
+It checks the pinned validator hash and uses an empty installed-library inventory.
+Install PHP with mbstring and zip for this optional check; neither PHP nor the
+upstream validator belongs in the distributed runtime.
+
+After generating retirement-parity.json, use fresh output directories:
+
+~~~powershell
+php -d extension=mbstring -d extension=zip tests/tooling/h5p-php-probe.php C:/tools/h5p-php-library retirement-parity.json C:/checks/php-validation
+if ($LASTEXITCODE) { throw 'Independent package validation failed' }
+./tests/tooling/moodle-handoff.ps1 -Corpus retirement-parity.json -IndependentReport C:/checks/php-validation/report.json -Destination exports/moodle-acceptance
+~~~
+
+The validator tests full packages and an intentionally invalid main-library
+reference. The handoff ZIP contains nine activities, hashes, the Core report,
+Spanish test instructions and a results CSV. It includes no executable tools.
+These checks validate structure and dependency packaging, not Moodle playback,
+accessibility or gradebook behavior. Minimal media fixtures also require follow-up
+with representative teaching media. Record destination versions, permissions and
+student attempts in the supplied template before claiming Moodle acceptance.

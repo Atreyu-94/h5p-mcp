@@ -46,6 +46,6 @@ unchanged store copy. Preserve the new copy and source/media files for later
 reconciliation. Snapshot activation alone rolls back library selection, not
 backend code or database state. No active host is reconfigured automatically.
 
-Lumi files/dependency removal is a separate packaging step; execution no longer
+Lumi files and its dependency have been removed from the distribution; execution never
 falls back to them. Structural checks are not independent H5P Core, Moodle
 playback, accessibility or grading acceptance.

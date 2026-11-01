@@ -4,7 +4,7 @@
 stdio tools. CLI equivalents are `compile`, `check` and `build`. All use the same
 worker-isolated compiler and the native content-only backend. They do not install
 libraries, select latest versions, download media or fall back to Lumi. The
-production package still contains the legacy dependency pending packaging cleanup; execution uses the native backend. Persistent source authoring is available in stdio and HTTP through prepare_stored_h5p_source with uploaded asset IDs. Durable source capture and
+production package contains only the native backend; the legacy Lumi dependency and adapters are removed. Persistent source authoring is available in stdio and HTTP through prepare_stored_h5p_source with uploaded asset IDs. Durable source capture and
 reconstruction are available through the local CLI commands described below.
 
 ```powershell
