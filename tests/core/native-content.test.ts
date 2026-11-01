@@ -48,7 +48,7 @@ test('native content backend exports corpus, verified media and runtime dependen
    expect(result.export_mode).toBe('content-only');expect(result.verification.importation).toBe('not_run');await preflight(output,true);
    const files=await entries(output);expect([...files.keys()].every(name=>name==='h5p.json'||name.startsWith('content/'))).toBe(true);
    const content=JSON.parse(files.get('content/content.json')!.toString()),metadata=JSON.parse(files.get('h5p.json')!.toString());
-   expect(metadata.mainLibrary).toBe(example.library.split(' ')[0]);expect(content).toEqual(result.content_json);
+   expect(metadata).not.toHaveProperty('dynamicDependencies');expect(metadata.mainLibrary).toBe(example.library.split(' ')[0]);expect(content).toEqual(result.content_json);
    expect(metadata.preloadedDependencies.some((item:Native)=>item.machineName.startsWith('H5PEditor'))).toBe(false);
    if(example.title==='Math'){expect(content.question).toBe(example.params.question);expect(metadata.preloadedDependencies.some((item:Native)=>item.machineName==='H5P.MathDisplay')).toBe(true);}
    if(example.title==='Image'){expect(files.get('content/'+content.media.type.params.file.path)).toEqual(png);expect(content.media.type.params.file.width).toBe(1);}
@@ -113,7 +113,11 @@ test('native full export preserves every pinned library file and keeps editor de
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-full-native-')),engine=new Engine();
  try{
   await fixture(root);const activity={title:'Full quiz',language:'en',license:'U',library:'H5P.QuestionSet 1.21',params:{introPage:{showIntroPage:false},questions:[{library:'H5P.TrueFalse 1.8',params:{question:'<p>True?</p>',correct:'true'}}],endGame:{showAnimations:false,skippable:false}}};
+  const mainFile=path.join(root,'libraries/H5P.QuestionSet-1.21/library.json'),main=JSON.parse(await fs.readFile(mainFile,'utf8'));
+  main.dynamicDependencies=[{machineName:'H5P.Audio',majorVersion:1,minorVersion:5}];await fs.writeFile(mainFile,JSON.stringify(main));
   const output=path.join(root,'full.h5p'),result=await engine.run({action:'export',backend:'native-content',export_mode:'with-libraries',data_dir:root,activity,path:output}) as Native;
+  expect(result.h5p_json.dynamicDependencies).toEqual([{machineName:'H5P.Audio',majorVersion:1,minorVersion:5}]);
+  expect(result.h5p_json.preloadedDependencies.some((item:Native)=>item.machineName==='H5P.Audio')).toBe(false);
   expect(result.export_mode).toBe('with-libraries');await preflight(output,true);
   const files=await entries(output);let count=2;
   for(const [name,library] of Object.entries(result.preparation_manifest.libraries) as Array<[string,Native]>){

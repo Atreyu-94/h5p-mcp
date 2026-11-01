@@ -61,8 +61,10 @@ export async function executeNative(request:CoreRequest) {
   if(report.mathematics.detected)runtime('H5P.MathDisplay 1.0','preloaded');
   const main=graph.get(report.activity.library)!,modes=main.metadata.embedTypes??['div'];
   if(!Array.isArray(modes)||!modes.length||modes.some(mode=>!['div','iframe'].includes(mode)))throw fail('INVALID_METADATA','Invalid embedTypes');
+  // H5P PHP Core treats an empty optional list as a malformed dependency object.
+  const dynamicDependencies=[...dynamic].filter(name=>!preloaded.has(name)).sort().map(libraryVersion);
   const h5p={title:report.activity.title,language:report.activity.language,license:report.activity.license,mainLibrary:main.version.machineName,embedTypes:modes,
-   preloadedDependencies:[...preloaded].sort().map(libraryVersion),dynamicDependencies:[...dynamic].filter(name=>!preloaded.has(name)).sort().map(libraryVersion)};
+   preloadedDependencies:[...preloaded].sort().map(libraryVersion),...(dynamicDependencies.length?{dynamicDependencies}:{})};
   const buffers=[['h5p.json',Buffer.from(JSON.stringify(h5p))],['content/content.json',Buffer.from(JSON.stringify(uploaded.activity.params))]] as const;
   const libraryFiles:Array<[string,string]>=[];let libraryBytes=0;
   if(request.export_mode==='with-libraries'){
