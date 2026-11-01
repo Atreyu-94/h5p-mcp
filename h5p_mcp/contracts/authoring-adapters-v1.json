@@ -10,5 +10,9 @@
   "H5P.Image 1.1": {
     "patch": 33,
     "semantics_sha256": "0c2f029cb5d13b8846530271548089b3f9fc87c1035d7af8c3dadedabf5aee1a"
+  },
+  "H5P.QuestionSet 1.21": {
+    "patch": 13,
+    "semantics_sha256": "b536484024fd2d71a36cb2ed928147273e58230d3ec28cef7bb8710a8570550e"
   }
 }

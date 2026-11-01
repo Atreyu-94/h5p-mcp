@@ -12,7 +12,7 @@ const read=(name:string)=>JSON.parse(fs.readFileSync(path.join(repositoryRoot,'h
 export const authoringSchema=read('authoring-v1.json'),adapters=read('authoring-adapters-v1.json');
 const validate=new Ajv2020({strict:false,allErrors:true}).compile<Native>(authoringSchema);
 const escape=(part:string)=>part.replaceAll('~','~0').replaceAll('/','~1');
-export async function compileSource(source:Native,libraries:string) {
+export async function compileSource(source:Native,libraries:string,prepare=true) {
  checkTree(source);
  const diagnostics:Native[]=[],warnings:string[]=[],sourceMap:Record<string,string>={},identities:Record<string,string>={};
  const error=(pointer:string,reason:string,stage='source')=>diagnostics.push({pointer,reason,stage,code:'SCHEMA_VALIDATION_FAILED'});
@@ -32,7 +32,7 @@ export async function compileSource(source:Native,libraries:string) {
    return fields;
   }catch{error(pointer,'library','adapter');}
  }
- const fields=await pin(source.library,'/library',source.type==='true_false'?'H5P.TrueFalse 1.8':'H5P.MultiChoice 1.16');
+ const fields=await pin(source.library,'/library',({true_false:'H5P.TrueFalse 1.8',multi_choice:'H5P.MultiChoice 1.16',question_set:'H5P.QuestionSet 1.21'} as Record<string,string>)[source.type]);
  const seen=new Set<string>([source.id]);identities[source.id]=stableId(source.project_id,source.id);
  const claim=(id:string,at:string)=>{if(seen.has(id))error(at,'duplicate');seen.add(id);identities[id]=stableId(source.project_id,source.id,id);};
  if(source.type==='multi_choice'){
@@ -47,13 +47,15 @@ export async function compileSource(source:Native,libraries:string) {
  if(diagnostics.length)return finish({normalized});
  const params:Native={};
  function text(value:Native,at:string,native:string){sourceMap[native]=at;try{return renderText(value);}catch{error(at,'markdown');return '';}}
- params.question=text(source.question,'/question','/params/question');
- params.behaviour={enableRetry:normalized.retry,enableSolutionsButton:normalized.show_solution,enableCheckButton:true,autoCheck:false};
- sourceMap['/params/behaviour/enableRetry']='/retry';sourceMap['/params/behaviour/enableSolutionsButton']='/show_solution';
+ if(source.type!=='question_set'){
+  params.question=text(source.question,'/question','/params/question');
+  params.behaviour={enableRetry:normalized.retry,enableSolutionsButton:normalized.show_solution,enableCheckButton:true,autoCheck:false};
+  sourceMap['/params/behaviour/enableRetry']='/retry';sourceMap['/params/behaviour/enableSolutionsButton']='/show_solution';
+ }
  if(source.type==='true_false'){
   params.correct=String(source.correct);sourceMap['/params/correct']='/correct';
   if(source.feedback){params.behaviour.feedbackOnCorrect=text(source.feedback.correct,'/feedback/correct','/params/behaviour/feedbackOnCorrect');params.behaviour.feedbackOnWrong=text(source.feedback.incorrect,'/feedback/incorrect','/params/behaviour/feedbackOnWrong');}
- }else{
+ }else if(source.type==='multi_choice'){
   params.answers=source.choices.map((choice:Native,i:number)=>{
    const prefix=`/params/answers/${i}`,origin=`/choices/${i}`;sourceMap[prefix]=origin;sourceMap[prefix+'/correct']='/correct_ids';
    const answer:Native={text:text(choice.text,origin+'/text',prefix+'/text'),correct:source.correct_ids.includes(choice.id)};
@@ -64,6 +66,29 @@ export async function compileSource(source:Native,libraries:string) {
   sourceMap['/params/behaviour/type']='/mode';sourceMap['/params/behaviour/singlePoint']='/scoring';sourceMap['/params/behaviour/randomAnswers']='/shuffle';
   // H5P uses floored percentage for feedback selection (Question.determineOverallFeedback).
   if(source.feedback)params.overallFeedback=[{from:0,to:99,feedback:text(source.feedback.incorrect,'/feedback/incorrect','/params/overallFeedback/0/feedback')},{from:100,to:100,feedback:text(source.feedback.correct,'/feedback/correct','/params/overallFeedback/1/feedback')}];
+ }else{
+  params.introPage={showIntroPage:false};params.questions=[];params.passPercentage=source.pass_percentage;params.randomQuestions=source.shuffle??false;
+  params.endGame={showResultPage:true,showSolutionButton:normalized.show_solution,showRetryButton:normalized.retry,showAnimations:false,skippable:false};
+  sourceMap['/params/passPercentage']='/pass_percentage';sourceMap['/params/randomQuestions']='/shuffle';
+  sourceMap['/params/endGame/showSolutionButton']='/show_solution';sourceMap['/params/endGame/showRetryButton']='/retry';
+  for(const [i,child] of source.questions.entries()){
+   const origin=`/questions/${i}`,prefix=`/params/questions/${i}`;
+   claim(child.id,origin+'/id');
+   const result=await compileSource({schema_version:'1',project_id:source.project_id,language:normalized.language,license:normalized.license,ui:{language:normalized.ui.language,missing:normalized.ui.missing},...child,assets:normalized.assets},libraries,false);
+   for(const item of result.diagnostics)diagnostics.push({...item,pointer:origin+item.pointer});
+   warnings.push(...result.warnings);
+   if(!result.ok)continue;
+   identities[child.id]=result.identities[child.id];
+   for(const [id,value] of Object.entries(result.identities))if(id!==child.id)identities[child.id+'/'+id]=value as string;
+   for(const [native,at] of Object.entries(result.source_map))if(native.startsWith('/params/'))sourceMap[prefix+native]=origin+at;
+   sourceMap[prefix+'/library']=origin+'/library';sourceMap[prefix+'/subContentId']=origin+'/id';
+   params.questions.push({library:child.library.name,params:result.activity.params,subContentId:identities[child.id]});
+  }
+  if(source.feedback){
+   // QuestionSet feedback is plain text, selected using the floored score percentage.
+   const feedback=(key:string,index:number)=>{const at='/feedback/'+key;sourceMap[`/params/endGame/overallFeedback/${index}/feedback`]=at;if(source.feedback[key].format!=='plain')error(at,'markdown');return source.feedback[key].value;};
+   params.endGame.overallFeedback=[{from:0,to:source.pass_percentage-1,feedback:feedback('incorrect',0)},{from:source.pass_percentage,to:100,feedback:feedback('correct',1)}];
+  }
  }
  async function translations(schema:Native[],version:string,target:Native,roots:string[],prefix:string){
   let translated:Native[]=[],missingDefault=false;
@@ -87,7 +112,7 @@ export async function compileSource(source:Native,libraries:string) {
   if(missingDefault){if(normalized.ui.missing==='error')error('/ui/language','translation','adapter');else warnings.push('Translation unavailable for some interface fields in '+version+'; using English defaults.');}
  }
  const usedOverrides=new Set<string>();
- await translations(fields!,source.library.name,params,source.type==='true_false'?['l10n','confirmCheck','confirmRetry']:['UI','confirmCheck','confirmRetry'],'/params');
+ await translations(fields!,source.library.name,params,source.type==='true_false'?['l10n','confirmCheck','confirmRetry']:source.type==='multi_choice'?['UI','confirmCheck','confirmRetry']:['texts','endGame'],'/params');
  if(source.image){
   const picture:Native={file:{path:'asset:'+source.image.asset,mime:source.image.mime,copyright:{license:source.image.copyright.license,authors:[{name:source.image.copyright.author,role:'Author'}]}},alt:source.image.alt,decorative:false};
   params.media={type:{library:'H5P.Image 1.1',subContentId:identities[source.image.id],params:picture}};
@@ -99,6 +124,7 @@ export async function compileSource(source:Native,libraries:string) {
  const activity={title:source.title,language:normalized.language,license:normalized.license,library:source.library.name,params,assets:normalized.assets};
  sourceMap['/title']='/title';sourceMap['/language']='/language';sourceMap['/license']='/license';sourceMap['/library']='/library';
  for(const key of Object.keys(normalized.assets))sourceMap['/assets/'+escape(key)]='/assets/'+escape(key);
+ if(!prepare)return finish({activity,normalized});
  let prepared:Native;
  try{prepared=await prepareNative(activity,libraries);}catch(cause:Native){diagnostics.push({pointer:'',stage:'adapter',reason:'adapter',code:cause.code||'LIBRARY_NOT_INSTALLED'});return finish({normalized});}
  const locate=(pointer:string)=>{let at=pointer;while(at){if(Object.hasOwn(sourceMap,at)){const origin=sourceMap[at];let current:Native=source;for(const part of origin.slice(1).split('/')){const key=part.replaceAll('~1','/').replaceAll('~0','~');if(!current||typeof current!=='object'||!Object.hasOwn(current,key))return '';current=current[key];}return origin;}at=at.slice(0,at.lastIndexOf('/'));}return '';};

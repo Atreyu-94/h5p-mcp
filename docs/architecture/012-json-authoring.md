@@ -118,3 +118,26 @@ fresh cache outside the checkout and asserts that Lumi cannot be resolved:
 
 This probe package intentionally omits Lumi. It tests the new authoring surface,
 not completion of the full product's legacy-operation retirement.
+
+## Question sets
+
+`type: "question_set"` uses pinned H5P.QuestionSet 1.21 (patch 13). Supply
+`questions` (1–100 TrueFalse/MultiChoice sources), `pass_percentage` (integer
+1–100), and optionally `shuffle`, `retry`, `show_solution`, and `feedback`.
+Children omit `schema_version`, `project_id`, and `assets`; they inherit the root
+project, asset table, language and interface language, with per-child UI overrides.
+Nested containers and unsupported question types are rejected.
+
+QuestionSet adds the children's scores and maximum scores without weights. A
+multiple-choice child using partial scoring therefore contributes its number of
+correct alternatives, while an all-or-nothing child contributes one point.
+Aggregate `feedback.correct` means passing the configured threshold, and
+`feedback.incorrect` means below it. These two texts must use `format: "plain"`;
+the pinned native field does not admit formatted HTML. Child feedback remains
+independent. The result page is enabled; no randomized pool or parent override
+silently changes a child's scoring or retry settings.
+
+Question IDs must be unique within the set, including the set's own ID. Reordering
+preserves UUIDs; duplicating a question requires a new question ID, which also
+renews its nested image/choice identities. Choice IDs are scoped to their question.
+The report uses `questionId/childId` for identities below questions.

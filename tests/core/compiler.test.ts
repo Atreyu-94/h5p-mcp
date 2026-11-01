@@ -71,3 +71,22 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   const persisted=await (await service.vault()).objects.get(stored.object_id,'preparation');expect(persisted.metadata.feedback.mathematics.detected).toBe(true);
  }finally{await service.close();if(oldExport===undefined)delete process.env.H5P_MCP_EXPORT_DIR;else process.env.H5P_MCP_EXPORT_DIR=oldExport;await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+ test('QuestionSet preserves child identities, scores and aggregate feedback and rejects unsupported children',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-question-set-'));try{
+  await compilerFixture(root);const libraries=path.join(root,'libraries');
+  const child=(value:Native)=>{const copy={...value};delete copy.schema_version;delete copy.project_id;return copy;};
+  const source={schema_version:'1',project_id:'demo',id:'quiz',type:'question_set',title:'Quiz',library:pin('H5P.QuestionSet 1.21'),pass_percentage:60,questions:[child(trueFalse()),child(multiChoice())],feedback:{correct:plain('Passed'),incorrect:plain('Review')}};
+  const result=await compileSource(source,libraries);
+  expect(result.diagnostics).toEqual([]);expect(result.ok).toBe(true);
+  expect(result.activity.params.questions[0].subContentId).toBe(stableId('demo','q1'));
+  expect(result.activity.params.questions[1].params.behaviour.singlePoint).toBe(false);
+  expect(result.activity.params.endGame.overallFeedback).toEqual([{from:0,to:59,feedback:'Review'},{from:60,to:100,feedback:'Passed'}]);
+  expect(result.source_map['/params/questions/1/params/answers/0/text']).toBe('/questions/1/choices/0/text');
+  const reordered=await compileSource({...source,questions:[...source.questions].reverse()},libraries);expect(reordered.identities).toEqual(result.identities);
+  const duplicated=await compileSource({...source,questions:[source.questions[0],{...structuredClone(source.questions[0]),id:'copy'}]},libraries);expect(duplicated.ok).toBe(true);expect(duplicated.identities.copy).not.toBe(duplicated.identities.q1);
+  const invalid=await compileSource({...source,questions:[source.questions[0],structuredClone(source.questions[0])]},libraries);expect(invalid.ok).toBe(false);expect(invalid.diagnostics).toContainEqual(expect.objectContaining({pointer:'/questions/1/id',reason:'duplicate'}));
+  expect((await compileSource({...source,questions:[structuredClone(source)]},libraries)).ok).toBe(false);
+  const missing=await compileSource({...source,questions:[{...source.questions[0],library:{...source.questions[0].library,patch:999}}]},libraries);expect(missing.diagnostics[0].pointer).toBe('/questions/0/library');
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+},120000);
