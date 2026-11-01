@@ -5,6 +5,7 @@ import {Service} from './adapters/service.js';
 import {readBounded} from './infrastructure/media.js';
 import {parseSource,type SourceLocation} from './infrastructure/source-document.js';
 import {report} from './adapters/contracts.js';
+import {freezeSource,rebuildSource} from './application/source-project.js';
 const [command,...args]=process.argv.slice(2);
 try {
  if(command==='stdio') await stdio();
@@ -16,10 +17,24 @@ try {
   let closing=false;const close=async()=>{if(closing)return;closing=true;await app.close();await listener.stop(true);};
   process.once('SIGINT',()=>{void close();});process.once('SIGTERM',()=>{void close();});
  }
- else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json> | build <source.json> <output-name> | admin <refresh|install|package> [name|path]');
+ else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json|yaml> | build <source.json|yaml> <output-name> | freeze <source.json|yaml> <new-directory> | rebuild <project-directory> <output-name> | admin <refresh|install|package> [name|path]');
  else {
   const service=new Service();await service.initialize();
   try {
+   if(command==='freeze'||command==='rebuild'){
+    let result;
+    if(command==='freeze'){
+     const filename=path.resolve(args[0]),{source}=parseSource(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)),/\.ya?ml$/i.test(filename)?'yaml':'json');
+     if(source?.assets&&typeof source.assets==='object')for(const [id,file] of Object.entries(source.assets))if(typeof file==='string')source.assets[id]=path.resolve(path.dirname(filename),file);
+     result=await freezeSource(source,await service.vault(),await service.authorize(path.resolve(args[1]),'EXPORT'),file=>service.authorize(file,'ASSET'));
+    }else{
+     const directory=await service.authorize(path.resolve(args[0]),'PACKAGE'),compiled=await rebuildSource(directory);
+     const destination=await service.destination(args[1]);
+     await service.run('export',{data_dir:path.join(directory,'data'),backend:'native-content',activity:compiled.activity,path:destination},AbortSignal.timeout(300000));
+     result={...report('export',true,[],{structure:'passed',semantics:'passed'}),export_mode:'content-only',reconstruction:'exact',artifact:await service.resources.artifact(destination,{preparation:compiled.activity.preparation,export_mode:'content-only'})};
+    }
+    console.log(JSON.stringify(result));
+   }else{
    let name:string,input:unknown,locations:Record<string,SourceLocation>|undefined;
    if(['compile','check','build'].includes(command)) {
     const filename=path.resolve(args[0]),parsed=parseSource(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)),/\.ya?ml$/i.test(filename)?'yaml':'json'),source=parsed.source;
@@ -41,6 +56,7 @@ try {
    }));
    await new Promise<void>((resolve,reject)=>process.stdout.write(JSON.stringify(reply.structuredContent)+'\n',error=>error?reject(error):resolve()));
    if(reply.structuredContent.ok===false) process.exitCode=1;
+   }
   } finally {await service.close();}
  }
-} catch(error:any) {if(error.source_locations)console.log(JSON.stringify({...report('validation',false,[{code:error.code,stage:'source',reason:'structure'}]),source_locations:error.source_locations}));else console.error('H5P command failed; verify arguments and host configuration.');process.exitCode=1;}
+} catch(error:any) {if(error.code)console.log(JSON.stringify({...report('validation',false,error.details||[{code:error.code,stage:'source',reason:'structure'}]),...(error.source_locations?{source_locations:error.source_locations}:{})}));else console.error('H5P command failed; verify arguments and host configuration.');process.exitCode=1;}

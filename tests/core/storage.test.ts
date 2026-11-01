@@ -61,6 +61,10 @@ test('unknown inventories and missing MathDisplay never claim target compatibili
  const target={core:{major:1,minor:28},inventory_at:'2026-09-20T00:00:00Z',can_install:false,libraries:[]};
  expect(compatibility(dependencies,lock,target).missing[0]).toContain('H5P.MathDisplay');
  expect(compatibility(dependencies,lock,{...target,can_install:true}).compatible).toBe(true);
+ expect(compatibility(dependencies,lock,{...target,can_install:true})).toMatchObject({declared_compatible:true,exact_match:false,destination_evidence:'not_run'});
+ const installed={machine_name:'H5P.MathDisplay',major:1,minor:0,patch:3};
+ expect(compatibility(dependencies,lock,{...target,libraries:[installed]}).exact_match).toBe(true);
+ expect(compatibility(dependencies,lock,{...target,libraries:[installed],allowed:[{...installed,patch:4}]}).compatible).toBe(false);
  expect(compatibility(dependencies,lock,{...target,can_install:true,core:{major:1,minor:27}}).compatible).toBe(false);
 });
 test('reservations bound concurrent staging and retention reclaims tombstones',async()=>{

@@ -105,3 +105,32 @@ test('Blanks separates answer alternatives from Markdown and Accordion pins its 
   const set=await compileSource({schema_version:'1',project_id:'demo',id:'set',type:'question_set',title:'Set',library:pin('H5P.QuestionSet 1.21'),pass_percentage:50,questions:[child]},libraries);expect(set.diagnostics).toEqual([]);expect(set.ok).toBe(true);
  }finally{await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test('durable source units reconstruct after TTL expiry and reject drift without touching originals',async()=>{
+ const {Objects}=await import('../../src/storage/objects.js'),{Vault}=await import('../../src/storage/vault.js'),{freezeSource,rebuildSource}=await import('../../src/application/source-project.js');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-source-unit-'));let now=Date.now();const objects=new Objects(path.join(root,'store'),{tenant:'local',owner:'local'},()=>now),vault=new Vault(objects,root);
+ try{
+  await compilerFixture(root);await objects.initialize();const source=trueFalse(),project=path.join(root,'project');
+  const frozen=await freezeSource(source,vault,project,async filename=>filename);expect(frozen.ok).toBe(true);
+  const first=await rebuildSource(project);expect(first.ok).toBe(true);
+  now+=366*86400000;await objects.collect();
+  const second=await rebuildSource(project);expect(second.activity).toEqual(first.activity);
+  await expect(freezeSource(source,vault,project,async filename=>filename)).rejects.toBeDefined();
+  const filename=path.join(project,'data/libraries/H5P.TrueFalse-1.8/semantics.json');await fs.appendFile(filename,' ');
+  await expect(rebuildSource(project)).rejects.toMatchObject({code:'OBJECT_INTEGRITY_FAILED'});
+  expect((await compileSource(source,path.join(root,'libraries'))).ok).toBe(true);
+ }finally{await vault.close();await fs.rm(root,{recursive:true,force:true});}
+},120000);
+
+test('pinned QuestionSet runtime sums child scores and uses aggregate feedback thresholds',async()=>{
+ const {runInNewContext}=await import('node:vm');const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-score-proof-'));
+ try{
+  await compilerFixture(root);const base=path.join(root,'libraries');
+  const runtime=await fs.readFile(path.join(base,'H5P.QuestionSet-1.21/js/questionset.js'),'utf8');
+  const children=[{getScore:()=>1,getMaxScore:()=>1},{getScore:()=>1,getMaxScore:()=>2}];
+  const extract=(name:string)=>{const match=runtime.match(new RegExp('this\\.'+name+' = (function \\(\\) \\{[\\s\\S]*?\\n  \\});'));expect(match).not.toBeNull();return runInNewContext('('+match![1]+')',{questionInstances:children});};
+  expect(extract('getScore')()).toBe(2);expect(extract('getMaxScore')()).toBe(3);
+  const question=await fs.readFile(path.join(base,'H5P.Question-1.5/scripts/question.js'),'utf8'),match=question.match(/Question\.determineOverallFeedback = (function \(feedbacks, scoreRatio\) \{[\s\S]*?\n  \});/);expect(match).not.toBeNull();
+  const feedback=runInNewContext('('+match![1]+')'),ranges=[{from:0,to:59,feedback:'Review'},{from:60,to:100,feedback:'Passed'}];expect(feedback(ranges,0.5999)).toBe('Review');expect(feedback(ranges,0.6)).toBe('Passed');expect(feedback(ranges,1)).toBe('Passed');
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+},120000);

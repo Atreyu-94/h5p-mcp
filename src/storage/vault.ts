@@ -14,18 +14,19 @@ import type {Native} from '../domain/types.js';
 const day=86400000;
 export interface Target {core:{major:number;minor:number};inventory_at:string;can_install:boolean;libraries:Array<{machine_name:string;major:number;minor:number;patch:number}>;allowed?:Array<{machine_name:string;major:number;minor:number;patch:number}>}
 export function compatibility(dependencies:Native,lock:Native,target:Target|undefined) {
- if(!target||!Number.isFinite(Date.parse(target.inventory_at)))return {compatible:false,code:'TARGET_INVENTORY_UNKNOWN',missing:[]};
- const missing:string[]=[];
+ if(!target||!Number.isFinite(Date.parse(target.inventory_at)))return {compatible:false,declared_compatible:false,exact_match:false,destination_evidence:'not_run',code:'TARGET_INVENTORY_UNKNOWN',missing:[]};
+ const missing:string[]=[];let exact=true;
  for(const [name,dependency] of Object.entries(dependencies) as Array<[string,Native]>) {
   const [machine,version]=name.split(' '),[major,minor]=version.split('.').map(Number);
   const required=lock.libraries.find((item:Native)=>item.machine_name===machine&&item.major===major&&item.minor===minor);
   const core=required?.core;
   if(!required||core&&(core.majorVersion>target.core.major||core.majorVersion===target.core.major&&core.minorVersion>target.core.minor)) {missing.push(name+' (Core)');continue;}
   const matches=(item:Target['libraries'][number])=>item.machine_name===machine&&item.major===major&&item.minor===minor&&item.patch===dependency.patch;
+  if(!target.libraries.some(matches))exact=false;
   if(target.allowed&&!target.allowed.some(matches)){missing.push(name+' (not allowed)');continue;}
   if(!target.libraries.some(matches)&&!target.can_install)missing.push(name+' patch '+dependency.patch);
  }
- return {compatible:missing.length===0,code:missing.length?'TARGET_INCOMPATIBLE':null,missing,inventory_at:target.inventory_at,verification:'declared inventory and installation permission; playback not tested'};
+ return {compatible:missing.length===0,declared_compatible:missing.length===0,exact_match:exact&&missing.length===0,destination_evidence:'not_run',code:missing.length?'TARGET_INCOMPATIBLE':null,missing,inventory_at:target.inventory_at,verification:'declared inventory and installation permission; playback not tested'};
 }
 export class Vault {
  private pool=new Pool(2,8);

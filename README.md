@@ -7,7 +7,9 @@ type's native schema instead of four fixed quiz templates.
 
 JSON authoring is available through local MCP `compile_h5p_source`, `check_h5p_source`
 and `build_h5p_source`, or CLI `compile`, `check` and `build`. It supports pinned
-TrueFalse/MultiChoice sources and exports content-only packages without Lumi.
+TrueFalse, MultiChoice, Blanks, QuestionSet and Accordion sources, reads JSON/YAML,
+and exports content-only packages without Lumi. CLI freeze/rebuild preserves source,
+media and pinned libraries outside preparation TTL.
 See [JSON authoring v1](docs/architecture/012-json-authoring.md) for schema, examples,
 scoring, translations and destination requirements.
 

@@ -5,7 +5,8 @@ stdio tools. CLI equivalents are `compile`, `check` and `build`. All use the sam
 worker-isolated compiler and the native content-only backend. They do not install
 libraries, select latest versions, download media or fall back to Lumi. The
 production package still includes Lumi for older operations until that migration
-is complete. HTTP source authoring and durable compiled sources are not advertised.
+is complete. HTTP source authoring is not advertised. Durable source capture and
+reconstruction are available through the local CLI commands described below.
 
 ```powershell
 bun dist/core/cli.js compile C:/activities/source.json
@@ -22,12 +23,15 @@ identify the backend used for a preparation.
 
 ## Source and supported adapters
 
-One document represents one activity. Supply project_id, id, title, type, question
+One document represents one activity. Supply project_id, id, title, type
 and an explicit library pin with name, patch and canonical semantics SHA-256.
 The compiler accepts only the supported pins in the adapter manifest: TrueFalse
-1.8 patch 21, MultiChoice 1.16 patch 27, and optional Image 1.1 patch 33. Other
+1.8 patch 21, MultiChoice 1.16 patch 27, Blanks 1.14 patch 37, QuestionSet 1.21
+patch 13, Accordion 1.0 patch 47, AdvancedText 1.1 patch 14, and optional Image
+1.1 patch 33. Other
 patches or changed semantics fail even when installed. The generic native authoring
-path remains available for other libraries. Composition and YAML are later work.
+path remains available for other libraries. Quiz leaves require `question`;
+containers use the child lists documented below.
 
 Question, choices, image and project use explicit IDs. IDs within an activity
 must be unique. Reordering choices retains their identities; duplicating an item
@@ -122,7 +126,7 @@ not completion of the full product's legacy-operation retirement.
 ## Question sets
 
 `type: "question_set"` uses pinned H5P.QuestionSet 1.21 (patch 13). Supply
-`questions` (1–100 TrueFalse/MultiChoice sources), `pass_percentage` (integer
+`questions` (1–100 TrueFalse/MultiChoice/Blanks sources), `pass_percentage` (integer
 1–100), and optionally `shuffle`, `retry`, `show_solution`, and `feedback`.
 Children omit `schema_version`, `project_id`, and `assets`; they inherit the root
 project, asset table, language and interface language, with per-child UI overrides.
@@ -181,3 +185,35 @@ errors identify the document position without echoing private source text. MCP
 continues to receive a structured JSON object and has no source-file coordinates.
 Both formats compile through the same schema and adapters; media paths remain
 relative to the source file.
+
+## Durable source units
+
+`h5p-mcp freeze source.yaml new-project-directory` creates an exclusive, portable
+source unit. It contains canonical `source.json`, local media, the actual required
+library files, `libraries.lock.json`, and a `project.lock.json` publication marker.
+It reuses the existing snapshot library-lock v1 shape; existing snapshots and
+preparations are not migrated or rewritten. The unit lives outside the TTL object
+store and does not expire. A failed capture has no publication marker and must not
+be used; capture again into a new directory.
+
+`h5p-mcp rebuild project-directory output-name` verifies all captured file hashes,
+compiles using the preserved libraries, compares the full backend/library/media
+manifest, and exports content-only. It refuses compiler or library drift. Keep the
+matching installed toolchain (including its lockfile); a newer compiler requires
+an explicit new capture after reviewing the source. This guarantees identical
+compiled content with matching dependencies, not byte-identical ZIP timestamps.
+Capture observes EXPORT and ASSET roots; rebuild observes PACKAGE and EXPORT
+roots, plus the ordinary export asset policy. These commands are local CLI only.
+Remote project storage and transport integration are separate work.
+
+Source remains the editable authority. Modify a working copy and capture a new
+unit; edits to locked files invalidate reconstruction. Edits made later in Moodle
+are not synchronized back to the source. Back up the complete directory, not just
+its hashes. The preserved library files provide reconstruction without downloads.
+
+Destination assessment now separates `declared_compatible` (including permission
+to install), `exact_match` against the declared patch inventory, and
+`destination_evidence: "not_run"`. Even an exact inventory match is not evidence
+of actual import, playback or grading. Patch-specific `allowed` policies remain
+in force. Audio/video native activities remain on the generic native path; these
+source adapters cover the documented quiz and text-composition scope.
