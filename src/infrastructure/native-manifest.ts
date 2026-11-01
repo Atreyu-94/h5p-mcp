@@ -40,7 +40,7 @@ export async function nativeManifest(root: string, activity: Activity, mathemati
   const backend: Record<string,string> = {};
   for(const name of ['authoring-v1.json','authoring-adapters-v1.json'])backend['contract/'+name]=hash(await fs.readFile(path.join(repositoryRoot,'h5p_mcp/contracts',name)));
   const load=createRequire(import.meta.url);
-  for(const name of ['sanitize-html','magic-bytes.js','yazl','yauzl-promise','@node-rs/crc32','probe-image-size'])
+  for(const name of ['sanitize-html','magic-bytes.js','yazl','yauzl-promise','@node-rs/crc32','probe-image-size','ajv','yaml'])
     backend['package/'+name]=hash(await fs.readFile(load.resolve(name+'/package.json')));
   // Ported rules have their own provenance; legacy manifests cannot hide a core change.
   const coreRoot=fileURLToPath(new URL('../',import.meta.url));

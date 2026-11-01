@@ -163,3 +163,21 @@ Accordion pins H5P.Accordion 1.0 patch 47 and H5P.AdvancedText 1.1 patch 14.
 Supply `panels: [{id, title, text, library}]` and optional `heading: "h2"|"h3"|"h4"`.
 Only AdvancedText children are admitted. This is informational content: score,
 feedback and retry settings are rejected. QuestionSet also admits Blanks children.
+
+## JSON and YAML files
+
+CLI `compile`, `check`, and `build` accept `.json`, `.yaml`, and `.yml` files.
+YAML uses the pinned `yaml` parser (2.9.1) and a JSON-compatible subset: string
+mapping keys, finite JSON-format numbers, booleans, null, arrays and objects.
+Duplicate keys, anchors, aliases, merge keys, explicit tags/directives and
+multiple documents are rejected. JSON files also reject duplicate keys. YAML
+plain `yes` and dates remain strings; quote version strings such as `"1"`.
+The parser uses the documented document/node and LineCounter APIs:
+https://eemeli.org/yaml/ .
+
+CLI diagnostics retain JSON Pointers and add `source_locations` with one-based
+line/column coordinates, using the nearest parent for missing properties. Syntax
+errors identify the document position without echoing private source text. MCP
+continues to receive a structured JSON object and has no source-file coordinates.
+Both formats compile through the same schema and adapters; media paths remain
+relative to the source file.

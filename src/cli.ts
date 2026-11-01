@@ -3,6 +3,8 @@ import path from 'node:path';
 import {stdio} from './adapters/stdio.js';
 import {Service} from './adapters/service.js';
 import {readBounded} from './infrastructure/media.js';
+import {parseSource,type SourceLocation} from './infrastructure/source-document.js';
+import {report} from './adapters/contracts.js';
 const [command,...args]=process.argv.slice(2);
 try {
  if(command==='stdio') await stdio();
@@ -18,9 +20,10 @@ try {
  else {
   const service=new Service();await service.initialize();
   try {
-   let name:string,input:unknown;
+   let name:string,input:unknown,locations:Record<string,SourceLocation>|undefined;
    if(['compile','check','build'].includes(command)) {
-    const filename=path.resolve(args[0]),source=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)));
+    const filename=path.resolve(args[0]),parsed=parseSource(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)),/\.ya?ml$/i.test(filename)?'yaml':'json'),source=parsed.source;
+    locations=parsed.locations;
     if(source&&typeof source==='object'&&source.assets&&typeof source.assets==='object'&&!Array.isArray(source.assets))for(const [id,file] of Object.entries(source.assets))if(typeof file==='string')source.assets[id]=path.resolve(path.dirname(filename),file);
     name=({compile:'compile_h5p_source',check:'check_h5p_source',build:'build_h5p_source'} as Record<string,string>)[command];
     input={source,...(command==='build'?{output_name:args[1]}:{})};
@@ -32,8 +35,12 @@ try {
     input=args[0]==='refresh'?{}:args[0]==='install'?{machine_name:args[1]}:{path:args[1]};
    } else throw new Error('Unknown command; use --help');
    const reply=await service.call(name,input);
+   if(locations)reply.structuredContent.source_locations=Object.fromEntries((reply.structuredContent.diagnostics||[]).map((item:{pointer:string})=>{
+    let pointer=item.pointer;while(!locations![pointer]&&pointer)pointer=pointer.slice(0,pointer.lastIndexOf('/'));
+    return [item.pointer,locations![pointer]];
+   }));
    await new Promise<void>((resolve,reject)=>process.stdout.write(JSON.stringify(reply.structuredContent)+'\n',error=>error?reject(error):resolve()));
    if(reply.structuredContent.ok===false) process.exitCode=1;
   } finally {await service.close();}
  }
-} catch {console.error('H5P command failed; verify arguments and host configuration.');process.exitCode=1;}
+} catch(error:any) {if(error.source_locations)console.log(JSON.stringify({...report('validation',false,[{code:error.code,stage:'source',reason:'structure'}]),source_locations:error.source_locations}));else console.error('H5P command failed; verify arguments and host configuration.');process.exitCode=1;}

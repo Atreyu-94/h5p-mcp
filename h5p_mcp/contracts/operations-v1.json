@@ -750,6 +750,27 @@
         },
         "transformations_truncated": {
           "type": "boolean"
+        },
+        "source_locations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "line",
+              "column"
+            ],
+            "properties": {
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "column": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
         }
       },
       "type": "object",
