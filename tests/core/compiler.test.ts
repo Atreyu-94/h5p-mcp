@@ -90,3 +90,18 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   const missing=await compileSource({...source,questions:[{...source.questions[0],library:{...source.questions[0].library,patch:999}}]},libraries);expect(missing.diagnostics[0].pointer).toBe('/questions/0/library');
  }finally{await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test('Blanks separates answer alternatives from Markdown and Accordion pins its text children',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-composition-'));try{
+  await compilerFixture(root);const libraries=path.join(root,'libraries');
+  const source:Native={schema_version:'1',project_id:'demo',id:'blanks',type:'blanks',title:'Blanks',library:pin('H5P.Blanks 1.14'),question:plain('Complete'),case_sensitive:true,blocks:[{id:'line',segments:[{format:'markdown',value:'**Length** \\(x_1\\): '},{id:'answer',answers:['metre','meter']}]}],feedback:{correct:plain('Good'),incorrect:plain('Review')}};
+  const result=await compileSource(source,libraries);expect(result.diagnostics).toEqual([]);expect(result.ok).toBe(true);expect(result.activity.params.questions[0]).toContain('*metre/meter*');expect(result.activity.params.questions[0]).toContain('<strong>Length</strong>');expect(result.activity.params.behaviour).toMatchObject({caseSensitive:true,acceptSpellingErrors:false});
+  for(const answer of ['a/b','a:b','a*b',' padded','a\nb']){const bad=structuredClone(source);bad.blocks[0].segments[1].answers=[answer];expect((await compileSource(bad,libraries)).diagnostics).toContainEqual(expect.objectContaining({pointer:'/blocks/0/segments/1/answers/0',reason:'delimiter'}));}
+  const star=structuredClone(source);star.blocks[0].segments[0]=plain('x*y');expect((await compileSource(star,libraries)).ok).toBe(false);
+  const panel={id:'panel',title:'Topic',text:{format:'markdown',value:'**Explanation**'},library:pin('H5P.AdvancedText 1.1')};
+  const accordion={schema_version:'1',project_id:'demo',id:'accordion',type:'accordion',title:'Accordion',library:pin('H5P.Accordion 1.0'),panels:[panel]};
+  const compiled=await compileSource(accordion,libraries);expect(compiled.diagnostics).toEqual([]);expect(compiled.activity.params.panels[0].content.subContentId).toBe(stableId('demo','accordion','panel'));expect(compiled.activity.params.panels[0].content.params.text).toBe('<p><strong>Explanation</strong></p>');
+  const child=structuredClone(source);delete child.schema_version;delete child.project_id;
+  const set=await compileSource({schema_version:'1',project_id:'demo',id:'set',type:'question_set',title:'Set',library:pin('H5P.QuestionSet 1.21'),pass_percentage:50,questions:[child]},libraries);expect(set.diagnostics).toEqual([]);expect(set.ok).toBe(true);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+},120000);

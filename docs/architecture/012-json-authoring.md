@@ -141,3 +141,25 @@ Question IDs must be unique within the set, including the set's own ID. Reorderi
 preserves UUIDs; duplicating a question requires a new question ID, which also
 renews its nested image/choice identities. Choice IDs are scoped to their question.
 The report uses `questionId/childId` for identities below questions.
+
+## Blanks and Accordion
+
+Blanks pins H5P.Blanks 1.14 patch 37. `question` supplies the instruction;
+`case_sensitive` is explicit. `blocks` contains 1–31 `{id, segments}` blocks.
+Each segment is either a text object or `{id, answers: ["metre", "meter"]}`.
+Every block requires at least one blank. Alternatives are case-sensitive when
+requested; spelling-error acceptance is disabled. Each blank contributes one
+point. Aggregate feedback uses 0–99/100 percent and plain text.
+
+Markdown is rendered before blank delimiters are inserted. Literal `*` remaining
+in rendered text is rejected, including in code and TeX; use a TeX command such
+as `\ast` when mathematically appropriate. Answers containing `*`, `/`, `:`, HTML
+brackets, newlines, or leading/trailing whitespace are rejected. The pinned H5P
+parser has no backslash escape, and HTML numeric escapes are decoded by the
+native sanitizer, so neither is an accepted workaround. Alternatives are an
+array, never a delimiter-bearing author string. No silent answer changes occur.
+
+Accordion pins H5P.Accordion 1.0 patch 47 and H5P.AdvancedText 1.1 patch 14.
+Supply `panels: [{id, title, text, library}]` and optional `heading: "h2"|"h3"|"h4"`.
+Only AdvancedText children are admitted. This is informational content: score,
+feedback and retry settings are rejected. QuestionSet also admits Blanks children.

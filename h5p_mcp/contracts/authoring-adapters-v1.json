@@ -14,5 +14,17 @@
   "H5P.QuestionSet 1.21": {
     "patch": 13,
     "semantics_sha256": "b536484024fd2d71a36cb2ed928147273e58230d3ec28cef7bb8710a8570550e"
+  },
+  "H5P.Blanks 1.14": {
+    "patch": 37,
+    "semantics_sha256": "f8a554382476122b6ffed13392a54925ef6378a0834b1e056a362b6fe0ee141d"
+  },
+  "H5P.Accordion 1.0": {
+    "patch": 47,
+    "semantics_sha256": "4a3bdfabb69f09e1a419c66c037c2dc921b0bce0e11ab5483a3989884fca7241"
+  },
+  "H5P.AdvancedText 1.1": {
+    "patch": 14,
+    "semantics_sha256": "5081e8b8c55d8f0c86503cea38f38ea01353a7e1648d10f672aa2b161d9af2a2"
   }
 }

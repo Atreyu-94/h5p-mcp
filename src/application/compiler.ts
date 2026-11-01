@@ -32,7 +32,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    return fields;
   }catch{error(pointer,'library','adapter');}
  }
- const fields=await pin(source.library,'/library',({true_false:'H5P.TrueFalse 1.8',multi_choice:'H5P.MultiChoice 1.16',question_set:'H5P.QuestionSet 1.21'} as Record<string,string>)[source.type]);
+ const fields=await pin(source.library,'/library',({true_false:'H5P.TrueFalse 1.8',multi_choice:'H5P.MultiChoice 1.16',question_set:'H5P.QuestionSet 1.21',blanks:'H5P.Blanks 1.14',accordion:'H5P.Accordion 1.0'} as Record<string,string>)[source.type]);
  const seen=new Set<string>([source.id]);identities[source.id]=stableId(source.project_id,source.id);
  const claim=(id:string,at:string)=>{if(seen.has(id))error(at,'duplicate');seen.add(id);identities[id]=stableId(source.project_id,source.id,id);};
  if(source.type==='multi_choice'){
@@ -47,7 +47,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
  if(diagnostics.length)return finish({normalized});
  const params:Native={};
  function text(value:Native,at:string,native:string){sourceMap[native]=at;try{return renderText(value);}catch{error(at,'markdown');return '';}}
- if(source.type!=='question_set'){
+ if(['true_false','multi_choice','blanks'].includes(source.type)){
   params.question=text(source.question,'/question','/params/question');
   params.behaviour={enableRetry:normalized.retry,enableSolutionsButton:normalized.show_solution,enableCheckButton:true,autoCheck:false};
   sourceMap['/params/behaviour/enableRetry']='/retry';sourceMap['/params/behaviour/enableSolutionsButton']='/show_solution';
@@ -66,6 +66,41 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   sourceMap['/params/behaviour/type']='/mode';sourceMap['/params/behaviour/singlePoint']='/scoring';sourceMap['/params/behaviour/randomAnswers']='/shuffle';
   // H5P uses floored percentage for feedback selection (Question.determineOverallFeedback).
   if(source.feedback)params.overallFeedback=[{from:0,to:99,feedback:text(source.feedback.incorrect,'/feedback/incorrect','/params/overallFeedback/0/feedback')},{from:100,to:100,feedback:text(source.feedback.correct,'/feedback/correct','/params/overallFeedback/1/feedback')}];
+ }else if(source.type==='blanks'){
+  params.text=params.question;delete params.question;sourceMap['/params/text']='/question';delete sourceMap['/params/question'];
+  params.behaviour.caseSensitive=source.case_sensitive;params.behaviour.acceptSpellingErrors=false;
+  sourceMap['/params/behaviour/caseSensitive']='/case_sensitive';
+  params.questions=source.blocks.map((block:Native,i:number)=>{
+   claim(block.id,`/blocks/${i}/id`);let blanks=0;
+   const rendered=block.segments.map((segment:Native,j:number)=>{
+    const at=`/blocks/${i}/segments/${j}`;
+    if(segment.answers){
+     blanks++;claim(segment.id,at+'/id');
+     return '*'+segment.answers.map((answer:string,k:number)=>{
+      // Pinned Blanks splits raw *, / and : before decoding entities. The native
+      // sanitizer decodes numeric escapes, so these literals cannot round-trip.
+      if(/[*/:<>\r\n]/.test(answer)||answer.trim()!==answer){error(at+`/answers/${k}`,'delimiter');return '';}
+      return renderText({format:'plain',value:answer}).slice(3,-4);
+     }).join('/')+'*';
+    }
+    const value=text(segment,at,`/params/questions/${i}`);
+    if(value.includes('*'))error(at,'delimiter');
+    return value.slice(3,-4);
+   }).join('');
+   if(!blanks)error(`/blocks/${i}`,'cardinality');
+   sourceMap[`/params/questions/${i}`]=`/blocks/${i}`;
+   return '<p>'+rendered+'</p>';
+  });
+  if(source.feedback){
+   params.overallFeedback=['incorrect','correct'].map((key,i)=>{const at='/feedback/'+key;sourceMap[`/params/overallFeedback/${i}/feedback`]=at;if(source.feedback[key].format!=='plain')error(at,'markdown');return {from:i?100:0,to:i?100:99,feedback:source.feedback[key].value};});
+  }
+ }else if(source.type==='accordion'){
+  params.hTag=source.heading??'h2';sourceMap['/params/hTag']='/heading';params.panels=[];
+  for(const [i,panel] of source.panels.entries()){
+   claim(panel.id,`/panels/${i}/id`);await pin(panel.library,`/panels/${i}/library`,'H5P.AdvancedText 1.1');
+   const prefix=`/params/panels/${i}`;sourceMap[prefix+'/title']=`/panels/${i}/title`;
+   params.panels.push({title:panel.title,content:{library:panel.library.name,subContentId:identities[panel.id],params:{text:text(panel.text,`/panels/${i}/text`,prefix+'/content/params/text')}}});
+  }
  }else{
   params.introPage={showIntroPage:false};params.questions=[];params.passPercentage=source.pass_percentage;params.randomQuestions=source.shuffle??false;
   params.endGame={showResultPage:true,showSolutionButton:normalized.show_solution,showRetryButton:normalized.retry,showAnimations:false,skippable:false};
@@ -97,7 +132,9 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    catch{if(normalized.ui.missing==='error')error('/ui/language','translation','adapter');else warnings.push('Translation unavailable for '+version+'; using English defaults.');}
   }
   function fill(entries:Native[],local:Native[],out:Native,at:string){
+   const hasText=(entry:Native):boolean=>entry.type==='text'&&typeof entry.default==='string'||entry.type==='group'&&(entry.fields||[]).some(hasText);
    entries.forEach((entry,i)=>{
+    if(!hasText(entry))return;
     const here=at+'/'+escape(entry.name);
     if(entry.type==='group'){out[entry.name]??={};fill(entry.fields||[],local?.[i]?.fields||[],out[entry.name],here);}
     else if(entry.type==='text'&&typeof entry.default==='string'){
@@ -112,7 +149,8 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   if(missingDefault){if(normalized.ui.missing==='error')error('/ui/language','translation','adapter');else warnings.push('Translation unavailable for some interface fields in '+version+'; using English defaults.');}
  }
  const usedOverrides=new Set<string>();
- await translations(fields!,source.library.name,params,source.type==='true_false'?['l10n','confirmCheck','confirmRetry']:source.type==='multi_choice'?['UI','confirmCheck','confirmRetry']:['texts','endGame'],'/params');
+ const roots=source.type==='true_false'?['l10n','confirmCheck','confirmRetry']:source.type==='multi_choice'?['UI','confirmCheck','confirmRetry']:source.type==='question_set'?['texts','endGame']:source.type==='blanks'?fields!.filter((f:Native)=>f.common).map((f:Native)=>f.name):[];
+ if(roots.length)await translations(fields!,source.library.name,params,roots,'/params');
  if(source.image){
   const picture:Native={file:{path:'asset:'+source.image.asset,mime:source.image.mime,copyright:{license:source.image.copyright.license,authors:[{name:source.image.copyright.author,role:'Author'}]}},alt:source.image.alt,decorative:false};
   params.media={type:{library:'H5P.Image 1.1',subContentId:identities[source.image.id],params:picture}};

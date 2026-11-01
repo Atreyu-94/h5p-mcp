@@ -26,7 +26,9 @@
       "enum": [
         "true_false",
         "multi_choice",
-        "question_set"
+        "question_set",
+        "blanks",
+        "accordion"
       ]
     },
     "title": {
@@ -231,6 +233,55 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 100
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 31,
+      "items": {
+        "$ref": "#/$defs/blank_block"
+      }
+    },
+    "case_sensitive": {
+      "type": "boolean"
+    },
+    "panels": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "text": {
+            "$ref": "#/$defs/text"
+          },
+          "library": {
+            "$ref": "#/$defs/pin"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "text",
+          "library"
+        ]
+      }
+    },
+    "heading": {
+      "enum": [
+        "h2",
+        "h3",
+        "h4"
+      ]
     }
   },
   "allOf": [
@@ -238,14 +289,13 @@
       "if": {
         "properties": {
           "type": {
-            "const": "question_set"
+            "const": "accordion"
           }
         }
       },
       "then": {
         "required": [
-          "questions",
-          "pass_percentage"
+          "panels"
         ],
         "not": {
           "anyOf": [
@@ -281,39 +331,73 @@
             },
             {
               "required": [
+                "shuffle"
+              ]
+            },
+            {
+              "required": [
+                "questions"
+              ]
+            },
+            {
+              "required": [
+                "pass_percentage"
+              ]
+            },
+            {
+              "required": [
+                "blocks"
+              ]
+            },
+            {
+              "required": [
+                "case_sensitive"
+              ]
+            },
+            {
+              "required": [
                 "image"
+              ]
+            },
+            {
+              "required": [
+                "feedback"
+              ]
+            },
+            {
+              "required": [
+                "retry"
+              ]
+            },
+            {
+              "required": [
+                "show_solution"
               ]
             }
           ]
         }
       },
       "else": {
-        "required": [
-          "question"
-        ],
         "allOf": [
           {
             "if": {
               "properties": {
                 "type": {
-                  "const": "true_false"
+                  "const": "blanks"
                 }
               }
             },
             "then": {
               "required": [
-                "correct"
+                "blocks",
+                "question",
+                "case_sensitive"
               ],
               "not": {
                 "anyOf": [
                   {
                     "required": [
-                      "choices"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "correct_ids"
+                      "correct"
                     ]
                   },
                   {
@@ -328,22 +412,178 @@
                   },
                   {
                     "required": [
+                      "choices"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "correct_ids"
+                    ]
+                  },
+                  {
+                    "required": [
                       "shuffle"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "questions"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "pass_percentage"
                     ]
                   }
                 ]
               }
             },
             "else": {
-              "required": [
-                "choices",
-                "correct_ids",
-                "mode",
-                "scoring"
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "type": {
+                        "const": "question_set"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "questions",
+                      "pass_percentage"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "question"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "correct"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "mode"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "scoring"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "choices"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "correct_ids"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "image"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "else": {
+                    "required": [
+                      "question"
+                    ],
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "type": {
+                              "const": "true_false"
+                            }
+                          }
+                        },
+                        "then": {
+                          "required": [
+                            "correct"
+                          ],
+                          "not": {
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "choices"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "correct_ids"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "mode"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "scoring"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "shuffle"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "else": {
+                          "required": [
+                            "choices",
+                            "correct_ids",
+                            "mode",
+                            "scoring"
+                          ],
+                          "not": {
+                            "required": [
+                              "correct"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "questions"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "pass_percentage"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
               ],
               "not": {
-                "required": [
-                  "correct"
+                "anyOf": [
+                  {
+                    "required": [
+                      "blocks"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "case_sensitive"
+                    ]
+                  }
                 ]
               }
             }
@@ -353,12 +593,12 @@
           "anyOf": [
             {
               "required": [
-                "questions"
+                "panels"
               ]
             },
             {
               "required": [
-                "pass_percentage"
+                "heading"
               ]
             }
           ]
@@ -406,7 +646,10 @@
             "H5P.TrueFalse 1.8",
             "H5P.MultiChoice 1.16",
             "H5P.Image 1.1",
-            "H5P.QuestionSet 1.21"
+            "H5P.QuestionSet 1.21",
+            "H5P.Blanks 1.14",
+            "H5P.Accordion 1.0",
+            "H5P.AdvancedText 1.1"
           ]
         },
         "patch": {
@@ -436,7 +679,8 @@
         "type": {
           "enum": [
             "true_false",
-            "multi_choice"
+            "multi_choice",
+            "blanks"
           ]
         },
         "title": {
@@ -617,6 +861,17 @@
               }
             }
           }
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 31,
+          "items": {
+            "$ref": "#/$defs/blank_block"
+          }
+        },
+        "case_sensitive": {
+          "type": "boolean"
         }
       },
       "allOf": [
@@ -624,24 +879,21 @@
           "if": {
             "properties": {
               "type": {
-                "const": "true_false"
+                "const": "blanks"
               }
             }
           },
           "then": {
             "required": [
-              "correct"
+              "blocks",
+              "question",
+              "case_sensitive"
             ],
             "not": {
               "anyOf": [
                 {
                   "required": [
-                    "choices"
-                  ]
-                },
-                {
-                  "required": [
-                    "correct_ids"
+                    "correct"
                   ]
                 },
                 {
@@ -656,26 +908,159 @@
                 },
                 {
                   "required": [
+                    "choices"
+                  ]
+                },
+                {
+                  "required": [
+                    "correct_ids"
+                  ]
+                },
+                {
+                  "required": [
                     "shuffle"
+                  ]
+                },
+                {
+                  "required": [
+                    "questions"
+                  ]
+                },
+                {
+                  "required": [
+                    "pass_percentage"
                   ]
                 }
               ]
             }
           },
           "else": {
-            "required": [
-              "choices",
-              "correct_ids",
-              "mode",
-              "scoring"
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "type": {
+                      "const": "true_false"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "correct"
+                  ],
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "choices"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "correct_ids"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "mode"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "scoring"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "shuffle"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "else": {
+                  "required": [
+                    "choices",
+                    "correct_ids",
+                    "mode",
+                    "scoring"
+                  ],
+                  "not": {
+                    "required": [
+                      "correct"
+                    ]
+                  }
+                }
+              }
             ],
             "not": {
-              "required": [
-                "correct"
+              "anyOf": [
+                {
+                  "required": [
+                    "blocks"
+                  ]
+                },
+                {
+                  "required": [
+                    "case_sensitive"
+                  ]
+                }
               ]
             }
           }
         }
+      ]
+    },
+    "segment": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "answers": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "id",
+            "answers"
+          ]
+        }
+      ]
+    },
+    "blank_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "segments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/segment"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "segments"
       ]
     }
   }
