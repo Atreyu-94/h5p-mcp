@@ -1,5 +1,5 @@
-// Usage: node tests/lumi_browser_smoke.cjs <runtime> <upstream checkout> <core> <h5p directory>
-// Requires @playwright/test from the upstream checkout and locally installed Chrome.
+// Usage: node tests/lumi_browser_smoke.cjs <runtime> <tooling directory> <core> <h5p directory>
+// Requires a current build, @playwright/test from the tooling directory and locally installed Chrome.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
@@ -11,7 +11,7 @@ const { H5PPlayer, H5PConfig, fsImplementations: stores } = load('@lumieducation
 const PackageImporter = load('@lumieducation/h5p-server/build/src/PackageImporter').default;
 const { chromium } = createRequire(path.join(upstream, 'package.json'))('@playwright/test');
 const mime = load('mime-types');
-const { containsLatex } = require('../h5p_mcp/lumi/math.cjs');
+const { containsLatex } = require('../dist/core/h5p/math.js');
 // Optional math mode checks rendering on every question, including feedback.
 const mathMode = process.env.H5P_MCP_MATH_SMOKE === '1';
 const user = { id: 'smoke', name: 'Smoke', email: '', type: 'local' };

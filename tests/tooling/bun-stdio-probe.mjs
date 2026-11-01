@@ -19,7 +19,9 @@ for(const modern of [false,true]) {
  const transport=new StdioClientTransport({command:bun,args,cwd:root,env,stderr:'pipe'});
  let errors='';transport.stderr?.on('data',chunk=>errors+=chunk);
  try {
+  console.log(JSON.stringify({stage:'connect',modern,entry}));
   await client.connect(transport);
+  console.log(JSON.stringify({stage:'discovery',modern}));
   const tools=(await client.listTools()).tools;
   assert(tools.some(t=>t.name==='prepare_h5p_activity'));
   assert(!tools.some(t=>t.name==='install_h5p_library'));
@@ -46,6 +48,7 @@ for(const modern of [false,true]) {
   const denied=await client.callTool({name:'refresh_h5p_catalog',arguments:{}});
   assert.equal(denied.isError,true);
   assert.equal(denied.structuredContent.diagnostics[0].code,'PERMISSION_DENIED');
+  console.log(JSON.stringify({stage:'catalog',modern}));
   const found=await client.callTool({name:'search_h5p_types',arguments:{installed_only:true}});
   assert(Array.isArray(found.structuredContent.activities),JSON.stringify(found));
   if(libraries&&modern) {
