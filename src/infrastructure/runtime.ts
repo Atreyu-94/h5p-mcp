@@ -11,5 +11,4 @@ while(!existsSync(path.join(root,'h5p_mcp/contracts/v1.json'))) {
  root=parent;
 }
 export const repositoryRoot=root;
-export const legacyRoot=path.join(root,'h5p_mcp/lumi');
 export const load=createRequire(path.join(root,'package.json'));

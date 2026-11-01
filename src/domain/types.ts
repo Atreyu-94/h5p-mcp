@@ -1,4 +1,4 @@
-/** Native H5P params and the Lumi CJS boundary are schema-dependent. */
+/** Native H5P parameters are schema-dependent. */
 export type Native = any;
 export type Pointer = Array<string | number>;
 export interface Activity {

@@ -21,17 +21,6 @@ export async function inspectMath(manager: Native, params: unknown): Promise<Nat
     return { detected: true, installed: true, library: 'H5P.MathDisplay 1.0', patch_version: library.patchVersion };
   } catch {
     return { detected: true, installed: false, library: 'H5P.MathDisplay 1.0',
-      error: 'LaTeX requires H5P.MathDisplay 1.0. Install the official addon with h5p-mcp --setup-lumi --lumi-package <absolute MathDisplay.h5p path>; export never downloads it.' };
-  }
-}
-
-export async function attachMathDependency(editor: Native, id: string, user: Native) {
-  const saved = await editor.getContent(id, user);
-  if (!containsLatex(saved.params.params)) return;
-  const dependencies = saved.h5p.preloadedDependencies || [];
-  if (!dependencies.some((d: Native) => d.machineName === MATH_LIBRARY.machineName)) {
-    saved.h5p.preloadedDependencies = [...dependencies, MATH_LIBRARY];
-    // Public storage API preserves the files already uploaded by Lumi.
-    await editor.contentManager.createOrUpdateContent(saved.h5p, saved.params.params, user, id);
+      error: 'LaTeX requires H5P.MathDisplay 1.0. Install the official addon with h5p-mcp admin package <absolute MathDisplay.h5p path>; export never downloads it.' };
   }
 }

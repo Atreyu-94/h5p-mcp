@@ -18,7 +18,7 @@ export class Engine {
     // Keep untrusted semantics/ZIP work killable; persistent queries share the bounded schema cache.
     if(request.action==='export') return await publish(pinned,signal);
     if(['compile','prepare','validate'].includes(request.action)) return await isolated(pinned,signal);
-    // Load the editor only for execution, not MCP discovery or isolated jobs.
+    // Load query execution only after acquiring the immutable generation.
     const {execute}=await import('./execute.js');
     return await execute(pinned);
    } finally {await snapshot.release();}
