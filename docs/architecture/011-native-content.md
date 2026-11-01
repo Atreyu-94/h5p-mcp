@@ -131,3 +131,9 @@ missing exact dependencies and incompatible Core fail explicitly; editor-widget
 business rules, services used during playback, accessibility and Moodle grading
 remain destination checks. Public prepare/export transport migration remains M5;
 the native backend already provides both content-only and full-library export.
+
+Library installation admits the documented resource extensions and license/notice
+files; server-side executable files are rejected. Invalid metadata, missing package
+files and native field failures produce structural validation errors; Core and
+version conflicts retain their specific codes. Package validation is an internal
+import check, not an independent H5P Core or Moodle acceptance certificate.

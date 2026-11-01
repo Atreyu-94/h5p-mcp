@@ -14,7 +14,7 @@ const hash=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 async function json(filename:string){return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)));}
 export async function unpack(filename:string,work:(root:string)=>Promise<Native>,content=false){
  await preflight(filename,content);const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-package-native-'));
- try{const zip=await load('yauzl-promise').open(filename);try{for await(const entry of zip){const target=path.join(root,entry.filename);if(entry.filename.endsWith('/')){await fs.mkdir(target,{recursive:true});continue;}await fs.mkdir(path.dirname(target),{recursive:true});const file=await fs.open(target,'wx');try{for await(const bytes of await entry.openReadStream())await file.writeFile(bytes);}finally{await file.close();}}}finally{await zip.close();}return await work(root);}finally{await fs.rm(root,{recursive:true,force:true});}
+ try{const zip=await load('yauzl-promise').open(filename);try{for await(const entry of zip){const target=path.join(root,entry.filename);if(entry.filename.endsWith('/')){await fs.mkdir(target,{recursive:true});continue;}await fs.mkdir(path.dirname(target),{recursive:true});const file=await fs.open(target,'wx');try{for await(const bytes of await entry.openReadStream())await file.writeFile(bytes);}finally{await file.close();}}}finally{await zip.close();}return await work(root);}catch(error:Native){if(['TARGET_INCOMPATIBLE','LIBRARY_VERSION_MISMATCH','LIMIT_EXCEEDED','UNSAFE_ARCHIVE'].includes(error.code))throw error;throw Object.assign(fail(),{details:error.details});}finally{await fs.rm(root,{recursive:true,force:true});}
 }
 export async function inspectLibraries(root:string){
  const result:Native[]=[];const repo=new FileLibraryRepository(root);
@@ -22,6 +22,10 @@ export async function inspectLibraries(root:string){
   if(!dir.isDirectory()||dir.name==='content')continue;
   const meta=await json(path.join(root,dir.name,'library.json')),version=libraryVersion(`${meta.machineName} ${meta.majorVersion}.${meta.minorVersion}`);
   if(dir.name!==`${version.machineName}-${version.majorVersion}.${version.minorVersion}`)throw fail();
+  if(typeof meta.title!=='string'||!meta.title||![0,1].includes(meta.runnable)||meta.coreApi&&(!Number.isSafeInteger(meta.coreApi.majorVersion)||meta.coreApi.majorVersion<0||!Number.isSafeInteger(meta.coreApi.minorVersion)||meta.coreApi.minorVersion<0))throw fail();
+  const allowed=new Set('js css json svg png jpg jpeg gif webp eot ttf woff woff2 otf txt pdf rtf doc docx xls xlsx ppt pptx odt ods odp xml csv diff patch swf md textile map'.split(' '));
+  const resources=async(base:string):Promise<void>=>{for(const e of await fs.readdir(base,{withFileTypes:true})){const file=path.join(base,e.name);if(e.isDirectory())await resources(file);else if(!allowed.has(path.extname(e.name).slice(1).toLowerCase())&&!/^(?:LICENSE|COPYING|NOTICE)(?:[.-].*)?$/i.test(e.name))throw fail();}};
+  await resources(path.join(root,dir.name));
   await repo.getLibrary(version);if(meta.coreApi&&(meta.coreApi.majorVersion>1||meta.coreApi.majorVersion===1&&meta.coreApi.minorVersion>28))throw fail('TARGET_INCOMPATIBLE');
   try{await repo.getSemantics(version);}catch(error:Native){if(meta.runnable||error.code!=='ENOENT')throw error;}
   for(const key of ['preloadedJs','preloadedCss'])for(const file of meta[key]||[]){if(typeof file.path!=='string'||file.path.includes('\\')||file.path.split('/').some((p:string)=>!p||p==='..'||p==='.')||path.isAbsolute(file.path))throw fail();await fs.access(path.join(root,dir.name,file.path));}
