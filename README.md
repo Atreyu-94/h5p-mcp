@@ -365,7 +365,7 @@ if ($LASTEXITCODE) { throw 'Independent package validation failed' }
 ./tests/tooling/moodle-handoff.ps1 -Corpus retirement-parity.json -IndependentReport C:/checks/php-validation/report.json -Destination exports/moodle-acceptance
 ~~~
 
-The validator tests full packages and an intentionally invalid main-library
+The validator tests full packages and an intentionally missing declared library
 reference. The handoff ZIP contains nine activities, hashes, the Core report,
 Spanish test instructions and a results CSV. It includes no executable tools.
 These checks validate structure and dependency packaging, not Moodle playback,
