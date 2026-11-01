@@ -268,6 +268,72 @@
         },
         "target": {
           "type": "object"
+        },
+        "report_version": {
+          "const": "2"
+        },
+        "transformations_truncated": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "type": "array"
+        },
+        "warnings_truncated": {
+          "type": "boolean"
+        },
+        "mathematics": {
+          "additionalProperties": false,
+          "required": [
+            "detected"
+          ],
+          "properties": {
+            "detected": {
+              "type": "boolean"
+            },
+            "installed": {
+              "type": "boolean"
+            },
+            "library": {
+              "const": "H5P.MathDisplay 1.0"
+            }
+          },
+          "type": "object"
+        },
+        "transformations": {
+          "maxItems": 100,
+          "items": {
+            "additionalProperties": false,
+            "required": [
+              "pointer",
+              "before",
+              "after",
+              "truncated"
+            ],
+            "properties": {
+              "truncated": {
+                "type": "boolean"
+              },
+              "after": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "pointer": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "before": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
         }
       },
       "required": [

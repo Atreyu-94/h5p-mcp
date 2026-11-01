@@ -8,6 +8,7 @@ export function projectSemantics(semantics:Native[]) {
  const libraries=new Set<string>();
  function project(entry:Native):Native {
   const field:Native={name:entry.name??null,type:entry.type,required:!entry.optional};
+  for(const key of ['label','description']) if(typeof entry[key]==='string') {field[key]=entry[key].slice(0,1024);if(entry[key].length>1024)field[key+'_truncated']=true;}
   if('default' in entry) field.default=structuredClone(entry.default);
   const rules=Object.fromEntries(constraints.filter(key=>key in entry).map(key=>[key,structuredClone(entry[key])]));
   if(Object.keys(rules).length) field.constraints=rules;

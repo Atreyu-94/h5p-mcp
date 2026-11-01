@@ -1,3 +1,5 @@
+import {feedback} from './feedback.js';
+import {descriptions} from './descriptions.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -48,6 +50,7 @@ export class Service {
   const result:Native={object_id:value.id,kind:value.kind,expires:value.expires};
   if(value.metadata.library_snapshot_id)result.library_snapshot_id=value.metadata.library_snapshot_id;
   if(value.files.payload)Object.assign(result,{mime_type:value.metadata.mime,size:value.files.payload.size,sha256:value.files.payload.sha256});
+  if(value.metadata.feedback)Object.assign(result,value.metadata.feedback);
   if(value.kind==='artifact')Object.assign(result,{uri:'h5p-artifact://stored/'+value.id,target:value.metadata.target,verification:verification({structure:'passed',semantics:'passed'})});
   return result;
  }
@@ -76,7 +79,7 @@ export class Service {
  allowed(name:string) {return !scopes[name]||(!this.immutable&&this.scopes.has(scopes[name]));}
  tools() {
   const tools:Native[]=Object.entries(this.definitions).filter(([name])=>this.allowed(name)).map(([name,[input,output]])=>({
-   name,description:name.replaceAll('_',' '),inputSchema:schema(input),
+   name,description:descriptions[name],inputSchema:schema(input),
    outputSchema:output==='preparation_report'||output==='operation_report'?schema(output):{type:'object',anyOf:[schema(output),schema('error_report')]},
    annotations:{readOnlyHint:['search_h5p_types','get_h5p_type_contract','validate_h5p_package','validate_stored_h5p_package','list_stored_h5p_objects'].includes(name),destructiveHint:name==='revoke_stored_h5p_object',openWorldHint:!!scopes[name]}
   }));
@@ -131,7 +134,7 @@ export class Service {
   }
   if(name==='prepare_h5p_activity') {
    const result=await this.run('prepare',{activity:{language:'en',license:'U',assets:{},...args}},signal);
-   return {...report(result.ok?'preparation':'validation',result.ok,result.diagnostics,{structure:result.ok?'passed':'failed',semantics:result.ok?'passed':'failed'}),activity:result.ok?result.activity:null};
+   return {...report(result.ok?'preparation':'validation',result.ok,result.diagnostics,{structure:result.ok?'passed':'failed',semantics:result.ok?'passed':'failed'}),...feedback(result),activity:result.ok?result.activity:null};
   }
   if(name==='validate_h5p_package') {
    const filename=await this.authorize(args.path,'PACKAGE');
@@ -176,7 +179,7 @@ export class Service {
    const code=['TimeoutError','AbortError'].includes(error.name)?'BACKEND_TIMEOUT':error.code==='EEXIST'?'OUTPUT_ALREADY_EXISTS':error.code==='ENOENT'?'ASSET_NOT_FOUND':['EACCES','EPERM'].includes(error.code)?'PERMISSION_DENIED':error.code;
    const item=diagnostic({...error,code});
    const validation=['SCHEMA_VALIDATION_FAILED','LIBRARY_NOT_INSTALLED','LIBRARY_VERSION_MISMATCH','UNSAFE_ARCHIVE','STALE_PREPARATION','ASSET_NOT_FOUND','MIME_MISMATCH'].includes(item.code);
-   result=report(validation?'validation':'operational_error',false,[item]);
+   result={...report(validation?'validation':'operational_error',false,validation&&Array.isArray(error.details)?error.details:[item]),...feedback(error.feedback)};
    if(name==='prepare_h5p_activity') result.activity=null;
   }
   const content:Native[]=[{type:'text',text:JSON.stringify(result)}];
@@ -206,7 +209,7 @@ export class Service {
   if(result.ok===false) return response;
   let legacy:Native=result;
   if(name==='get_h5p_activity_schema'&&mapped===target) legacy=JSON.parse((await this.resources.read(result.raw_schema.uri)).contents[0].text);
-  if(name==='create_h5p_activity') legacy={...result,errors:[],warnings:[]};
+  if(name==='create_h5p_activity') legacy={...result,errors:[]};
   if(name==='export_h5p') {
    const entry=this.resources.artifacts.get(result.artifact.uri)!;
    legacy={output_path:entry.filename,h5p_json:result.artifact.manifest.h5p,content_json:entry.content,verification:result.verification};

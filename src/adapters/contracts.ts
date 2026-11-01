@@ -32,7 +32,7 @@ export function diagnostic(error:Native) {
  const key=Object.hasOwn(codes.codes,code)?code:'INTERNAL_ERROR';
  const [retryable,message,suggested_fix]=codes.codes[key];
  const pointer=typeof error?.pointer==='string'&&/^(?:\/(?:[^~/]|~[01])*)*$/.test(error.pointer)?error.pointer.slice(0,4096):'';
- const expected=key==='TARGET_INCOMPATIBLE'?String(Array.isArray(error.targetMissing)?error.targetMissing.filter((v:unknown)=>typeof v==='string'&&/^H5P\.[A-Za-z0-9 .()_-]+$/.test(v)).join(', '):error.expected||'').slice(0,1024)||null:null;
+ const expected=key==='TARGET_INCOMPATIBLE'?String(Array.isArray(error.targetMissing)?error.targetMissing.filter((v:unknown)=>typeof v==='string'&&/^H5P\.[A-Za-z0-9 .()_-]+$/.test(v)).join(', '):error.expected||'').slice(0,256)||null:null;
  return {code:key,pointer,message,expected,actual:null,retryable,suggested_fix};
 }
 export const failure=(code:string)=>Object.assign(new Error(code),{code});

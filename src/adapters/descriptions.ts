@@ -1,0 +1,21 @@
+export const descriptions:Record<string,string>={
+ search_h5p_types:'Discover cached or installed H5P types. Hub presence is not proof of authoring or destination compatibility; use installed_only for local libraries.',
+ get_h5p_type_contract:'Read installed native fields, labels, constraints and exact child versions. raw_schema links to complete semantics; no installation or download.',
+ prepare_h5p_activity:'Validate native H5P params and local media against an exact installed library. Returns a prepared activity, diagnostics and proposed text changes; does not certify playback.',
+ export_h5p_activity:'Export a native activity with libraries using the transitional backend. Preserve its preparation manifest to detect drift. Never overwrites a destination.',
+ validate_h5p_package:'Inspect and import a local package in disposable storage; does not install into your library store or test Moodle playback.',
+ export_h5p_batch:'Export native activities sequentially with per-item results. Earlier successful artifacts remain if a later item fails.',
+ refresh_h5p_catalog:'Explicitly refresh the Hub catalogue over the network; requires catalog:refresh and a mutable host.',
+ install_h5p_library:'Explicitly download/install a library; requires libraries:install. Ordinary authoring never installs dependencies.',
+ install_h5p_library_package:'Install libraries from an authorized package; requires libraries:install and a mutable host.',
+ upload_h5p_asset:'Copy and verify a local media file into owner-bound immutable storage; return its opaque asset ID.',
+ upload_h5p_package:'Copy a package into owner-bound storage for explicit validation or administrative installation.',
+ prepare_stored_h5p_activity:'Prepare native content using opaque asset IDs and an immutable library snapshot. Returns a durable preparation ID and bounded author feedback.',
+ export_prepared_h5p_activity:'Export a stored preparation with ownership, expiry and idempotency checks; optionally assess a known destination inventory.',
+ validate_stored_h5p_package:'Validate an owner-bound package in disposable storage; does not certify browser playback or grading.',
+ register_h5p_target_profile:'Store a dated Core/library inventory for compatibility checks; an inventory is not playback evidence.',
+ list_stored_h5p_objects:'List objects owned by the authenticated principal, optionally filtered by kind.',
+ revoke_stored_h5p_object:'Revoke access to an owner-bound stored object; subsequent reads and exports fail.',
+ capture_h5p_library_snapshot:'Capture immutable installed libraries for reproducible preparation; requires library administration.',
+ activate_h5p_library_snapshot:'Select an existing owner-bound library snapshot for future preparations; requires library administration.'
+};

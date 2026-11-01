@@ -1,3 +1,4 @@
+import {feedback} from '../adapters/feedback.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -82,10 +83,10 @@ export class Vault {
     await fs.writeFile(assets[name],bytes,{flag:'wx'});
    }
    const result:Native=await this.pool.run(()=>isolated({action:'prepare',data_dir:path.join(snapshot.root,'data'),activity:{language:'en',license:'U',...input,assets}},signal,[path.join(stage,'assets')]),signal);
-   if(!result.ok)throw Object.assign(storageError('SCHEMA_VALIDATION_FAILED'),{details:result.diagnostics});
+   if(!result.ok)throw Object.assign(storageError('SCHEMA_VALIDATION_FAILED'),{details:result.diagnostics,feedback:feedback(result)});
    const activity={...result.activity,assets:finalAssets};
    await fs.writeFile(path.join(stage,'preparation.json'),JSON.stringify({activity,library_snapshot_id:snapshot.id}));
-   return {library_snapshot_id:snapshot.id,title:activity.title,library:activity.library};
+   return {library_snapshot_id:snapshot.id,title:activity.title,library:activity.library,feedback:feedback(result)};
   },{signal:callerSignal});
  }
  async target(profile:Target,ttl=day) {

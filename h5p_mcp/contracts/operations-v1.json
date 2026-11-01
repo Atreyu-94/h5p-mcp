@@ -1,43 +1,665 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
-    "error_report": {"allOf":[{"$ref":"#/$defs/operation_report"},{"properties":{"ok":{"const":false},"diagnostics":{"minItems":1},"kind":{"enum":["validation","operational_error"]}}}]},
-    "empty_input": {"type":"object","properties":{},"additionalProperties":false},
-    "search_input": {"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","default":""},"installed_only":{"type":"boolean","default":false},"offset":{"type":"integer","minimum":0,"default":0},"limit":{"type":"integer","minimum":1,"maximum":100,"default":20}}},
-    "library_input": {"type":"object","additionalProperties":false,"required":["machine_name"],"dependentRequired":{"major_version":["minor_version"],"minor_version":["major_version"]},"properties":{"machine_name":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9_.-]*$"},"major_version":{"type":"integer","minimum":0},"minor_version":{"type":"integer","minimum":0}}},
-    "path_input": {"type":"object","additionalProperties":false,"required":["path"],"properties":{"path":{"type":"string","minLength":1}}},
-    "local_activity": {"type":"object","additionalProperties":false,"required":["title","library","params"],"properties":{"title":{"type":"string","minLength":1,"maxLength":200},"library":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9_.-]* [0-9]+\\.[0-9]+$"},"params":{"type":"object"},"language":{"type":"string","minLength":2,"maxLength":20},"license":{"type":"string"},"assets":{"type":"object","additionalProperties":{"type":"string"}},"preparation":{"type":["object","null"]}}},
-    "export_local_input": {"type":"object","additionalProperties":false,"required":["activity","output_name"],"properties":{"activity":{"$ref":"#/$defs/local_activity"},"output_name":{"type":"string","minLength":1,"maxLength":200}}},
-    "batch_input": {"type":"object","additionalProperties":false,"required":["activities"],"properties":{"activities":{"type":"array","items":{"$ref":"#/$defs/local_activity"}},"name_prefix":{"type":"string","default":"activity"}}},
-    "artifact": {"type":"object","additionalProperties":false,"required":["uri","mime_type","size","sha256","manifest"],"properties":{"uri":{"type":"string","pattern":"^h5p-artifact://package/[0-9a-f]{32}$"},"mime_type":{"const":"application/zip"},"size":{"type":"integer","minimum":0},"sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"manifest":{"type":"object"}}},
-    "operation_report": {"type":"object","additionalProperties":false,"required":["contract_version","ok","kind","diagnostics","diagnostics_truncated","verification"],"properties":{"contract_version":{"const":"1"},"ok":{"type":"boolean"},"kind":{"enum":["export","validation","operational_error"]},"diagnostics":{"type":"array","maxItems":100,"items":{"$ref":"#/$defs/diagnostic"}},"diagnostics_truncated":{"type":"boolean"},"verification":{"$ref":"#/$defs/verification"},"artifact":{"$ref":"#/$defs/artifact"}}},
-    "search_output": {"type":"object","additionalProperties":false,"required":["core","last_updated","total","offset","activities","note"],"properties":{"core":{"type":"string"},"last_updated":{"type":["number","null"]},"total":{"type":"integer"},"offset":{"type":"integer"},"activities":{"type":"array","items":{"type":"object"}},"note":{"type":"string"}}},
-    "contract_output": {"type":"object","additionalProperties":false,"required":["contract_version","format","library","patch_version","core","fields","sublibraries","examples","raw_schema","x-h5p"],"properties":{"contract_version":{"const":"1"},"format":{"const":"h5p-native-compact-v1"},"library":{"type":"string"},"patch_version":{"type":"integer"},"core":{"type":"string"},"fields":{"type":"array","items":{"type":"object"}},"sublibraries":{"type":"array","items":{"type":"string"}},"examples":{"type":"array","items":{"type":"object"}},"raw_schema":{"type":"object"},"x-h5p":{"type":"object"}}},
-    "schema_output": {"type":"object","additionalProperties":false,"required":["core","library","patch_version","metadata","semantics","authoring_supported","note"],"properties":{"core":{"type":"string"},"library":{"type":"string"},"patch_version":{"type":"integer"},"metadata":{"type":"object"},"semantics":{"type":"array"},"authoring_supported":{"type":"boolean"},"note":{"type":"string"}}},
-    "install_output": {"type":"object","additionalProperties":false,"required":["core","libraries"],"properties":{"core":{"type":"string"},"libraries":{"type":"object","additionalProperties":{"type":"string"}}}},
-    "batch_item": {"type":"object","additionalProperties":false,"required":["ok","output_name"],"properties":{"ok":{"type":"boolean"},"output_name":{"type":"string"},"output_path":{"type":"string"},"error":{"type":"string"},"kind":{"enum":["validation","operational_error"]},"diagnostics":{"type":"array","maxItems":100,"items":{"$ref":"#/$defs/diagnostic"}}}},
-    "batch_output": {"type":"object","additionalProperties":false,"required":["count","succeeded","results"],"properties":{"count":{"type":"integer"},"succeeded":{"type":"integer"},"results":{"type":"array","items":{"$ref":"#/$defs/batch_item"}}}},
-    "opaque_id": {"type":"string","pattern":"^[0-9a-f]{32}$"},
-    "prepare_remote_input": {"type":"object","additionalProperties":false,"required":["title","library","params"],"properties":{"title":{"type":"string","minLength":1,"maxLength":200},"library":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9_.-]* [0-9]+\\.[0-9]+$"},"params":{"type":"object","description":"Native media references must bind to asset IDs; no server filesystem interpretation."},"language":{"type":"string"},"license":{"type":"string"},"assets":{"type":"object","additionalProperties":{"$ref":"#/$defs/opaque_id"}}}},
-    "export_remote_input": {"type":"object","additionalProperties":false,"required":["preparation_id"],"properties":{"preparation_id":{"$ref":"#/$defs/opaque_id"}}},
-    "package_remote_input": {"type":"object","additionalProperties":false,"required":["package_id"],"properties":{"package_id":{"$ref":"#/$defs/opaque_id"}}},
-    "resource_remote_input": {"type":"object","additionalProperties":false,"required":["artifact_id"],"properties":{"artifact_id":{"$ref":"#/$defs/opaque_id"}}}
+    "error_report": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/operation_report"
+        },
+        {
+          "properties": {
+            "ok": {
+              "const": false
+            },
+            "diagnostics": {
+              "minItems": 1
+            },
+            "kind": {
+              "enum": [
+                "validation",
+                "operational_error"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "empty_input": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "search_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "type": "string",
+          "default": ""
+        },
+        "installed_only": {
+          "type": "boolean",
+          "default": false
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      }
+    },
+    "library_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "machine_name"
+      ],
+      "dependentRequired": {
+        "major_version": [
+          "minor_version"
+        ],
+        "minor_version": [
+          "major_version"
+        ]
+      },
+      "properties": {
+        "machine_name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "major_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minor_version": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "path_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "local_activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "library",
+        "params"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "library": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]* [0-9]+\\.[0-9]+$"
+        },
+        "params": {
+          "type": "object"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 20
+        },
+        "license": {
+          "type": "string"
+        },
+        "assets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "preparation": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "export_local_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "activity",
+        "output_name"
+      ],
+      "properties": {
+        "activity": {
+          "$ref": "#/$defs/local_activity"
+        },
+        "output_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "batch_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "activities"
+      ],
+      "properties": {
+        "activities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/local_activity"
+          }
+        },
+        "name_prefix": {
+          "type": "string",
+          "default": "activity"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri",
+        "mime_type",
+        "size",
+        "sha256",
+        "manifest"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "pattern": "^h5p-artifact://package/[0-9a-f]{32}$"
+        },
+        "mime_type": {
+          "const": "application/zip"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "manifest": {
+          "type": "object"
+        }
+      }
+    },
+    "operation_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "ok",
+        "kind",
+        "diagnostics",
+        "diagnostics_truncated",
+        "verification"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "1"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "export",
+            "validation",
+            "operational_error"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/diagnostic"
+          }
+        },
+        "diagnostics_truncated": {
+          "type": "boolean"
+        },
+        "verification": {
+          "$ref": "#/$defs/verification"
+        },
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "report_version": {
+          "const": "2"
+        },
+        "transformations_truncated": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "type": "array"
+        },
+        "warnings_truncated": {
+          "type": "boolean"
+        },
+        "mathematics": {
+          "additionalProperties": false,
+          "required": [
+            "detected"
+          ],
+          "properties": {
+            "detected": {
+              "type": "boolean"
+            },
+            "installed": {
+              "type": "boolean"
+            },
+            "library": {
+              "const": "H5P.MathDisplay 1.0"
+            }
+          },
+          "type": "object"
+        },
+        "transformations": {
+          "maxItems": 100,
+          "items": {
+            "additionalProperties": false,
+            "required": [
+              "pointer",
+              "before",
+              "after",
+              "truncated"
+            ],
+            "properties": {
+              "truncated": {
+                "type": "boolean"
+              },
+              "after": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "pointer": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "before": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        }
+      }
+    },
+    "search_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core",
+        "last_updated",
+        "total",
+        "offset",
+        "activities",
+        "note"
+      ],
+      "properties": {
+        "core": {
+          "type": "string"
+        },
+        "last_updated": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "total": {
+          "type": "integer"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "contract_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "format",
+        "library",
+        "patch_version",
+        "core",
+        "fields",
+        "sublibraries",
+        "examples",
+        "raw_schema",
+        "x-h5p"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "1"
+        },
+        "format": {
+          "const": "h5p-native-compact-v1"
+        },
+        "library": {
+          "type": "string"
+        },
+        "patch_version": {
+          "type": "integer"
+        },
+        "core": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "sublibraries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "raw_schema": {
+          "type": "object"
+        },
+        "x-h5p": {
+          "type": "object"
+        }
+      }
+    },
+    "schema_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core",
+        "library",
+        "patch_version",
+        "metadata",
+        "semantics",
+        "authoring_supported",
+        "note"
+      ],
+      "properties": {
+        "core": {
+          "type": "string"
+        },
+        "library": {
+          "type": "string"
+        },
+        "patch_version": {
+          "type": "integer"
+        },
+        "metadata": {
+          "type": "object"
+        },
+        "semantics": {
+          "type": "array"
+        },
+        "authoring_supported": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "install_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core",
+        "libraries"
+      ],
+      "properties": {
+        "core": {
+          "type": "string"
+        },
+        "libraries": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "batch_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "output_name"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "output_name": {
+          "type": "string"
+        },
+        "output_path": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "validation",
+            "operational_error"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/diagnostic"
+          }
+        }
+      }
+    },
+    "batch_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "succeeded",
+        "results"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "succeeded": {
+          "type": "integer"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/batch_item"
+          }
+        }
+      }
+    },
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "prepare_remote_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "library",
+        "params"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "library": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]* [0-9]+\\.[0-9]+$"
+        },
+        "params": {
+          "type": "object",
+          "description": "Native media references must bind to asset IDs; no server filesystem interpretation."
+        },
+        "language": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "assets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/opaque_id"
+          }
+        }
+      }
+    },
+    "export_remote_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preparation_id"
+      ],
+      "properties": {
+        "preparation_id": {
+          "$ref": "#/$defs/opaque_id"
+        }
+      }
+    },
+    "package_remote_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package_id"
+      ],
+      "properties": {
+        "package_id": {
+          "$ref": "#/$defs/opaque_id"
+        }
+      }
+    },
+    "resource_remote_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/opaque_id"
+        }
+      }
+    }
   },
   "local": {
-    "search_h5p_types": ["search_input","search_output"],
-    "get_h5p_type_contract": ["library_input","contract_output"],
-    "refresh_h5p_catalog": ["empty_input","search_output"],
-    "install_h5p_library": ["library_input","schema_output"],
-    "install_h5p_library_package": ["path_input","install_output"],
-    "export_h5p_activity": ["export_local_input","operation_report"],
-    "validate_h5p_package": ["path_input","operation_report"],
-    "export_h5p_batch": ["batch_input","batch_output"]
+    "search_h5p_types": [
+      "search_input",
+      "search_output"
+    ],
+    "get_h5p_type_contract": [
+      "library_input",
+      "contract_output"
+    ],
+    "refresh_h5p_catalog": [
+      "empty_input",
+      "search_output"
+    ],
+    "install_h5p_library": [
+      "library_input",
+      "schema_output"
+    ],
+    "install_h5p_library_package": [
+      "path_input",
+      "install_output"
+    ],
+    "export_h5p_activity": [
+      "export_local_input",
+      "operation_report"
+    ],
+    "validate_h5p_package": [
+      "path_input",
+      "operation_report"
+    ],
+    "export_h5p_batch": [
+      "batch_input",
+      "batch_output"
+    ]
   },
   "remote": {
     "execution_supported": true,
-    "requires": ["Explicit HTTP configuration", "OIDC access JWT and host-managed public JWKS", "Authenticated principal and operation scopes"],
-    "inputs": {"search_h5p_types":"search_input","get_h5p_type_contract":"library_input","prepare_stored_h5p_activity":"stored_prepare_input","export_prepared_h5p_activity":"stored_export_input","validate_stored_h5p_package":"stored_id_input","install_h5p_library_package":"stored_id_input","list_stored_h5p_objects":"stored_list_input","revoke_stored_h5p_object":"stored_id_input","register_h5p_target_profile":"stored_target_input","capture_h5p_library_snapshot":"empty_input","activate_h5p_library_snapshot":"stored_id_input"},
-    "rest": {"POST /uploads/assets":"authenticated raw media bytes","POST /uploads/packages":"authenticated raw application/zip bytes","GET /artifacts/{id}":"owner-authorized package download"},
+    "requires": [
+      "Explicit HTTP configuration",
+      "OIDC access JWT and host-managed public JWKS",
+      "Authenticated principal and operation scopes"
+    ],
+    "inputs": {
+      "search_h5p_types": "search_input",
+      "get_h5p_type_contract": "library_input",
+      "prepare_stored_h5p_activity": "stored_prepare_input",
+      "export_prepared_h5p_activity": "stored_export_input",
+      "validate_stored_h5p_package": "stored_id_input",
+      "install_h5p_library_package": "stored_id_input",
+      "list_stored_h5p_objects": "stored_list_input",
+      "revoke_stored_h5p_object": "stored_id_input",
+      "register_h5p_target_profile": "stored_target_input",
+      "capture_h5p_library_snapshot": "empty_input",
+      "activate_h5p_library_snapshot": "stored_id_input"
+    },
+    "rest": {
+      "POST /uploads/assets": "authenticated raw media bytes",
+      "POST /uploads/packages": "authenticated raw application/zip bytes",
+      "GET /artifacts/{id}": "owner-authorized package download"
+    },
     "tasks": "not advertised; bounded synchronous operations"
   }
 }
