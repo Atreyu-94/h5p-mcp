@@ -1,17 +1,25 @@
+import {inspectText,metadataErrors} from '../domain/content-policy.js';
+import type {LibraryRepository} from '../h5p/libraries.js';
 import type {Native, Activity, Pointer} from '../domain/types.js';
 // Generic native-semantics checks. This is not a replacement for browser tests
 // or every content type's editor widget/business rules.
-import {createMediaResolver} from '../infrastructure/media.js';
+import {createMediaResolver,type SaveMedia} from '../infrastructure/media.js';
 import {randomUUID} from 'node:crypto';
 import {inspectMath} from '../h5p/math.js';
 import {checkTree, limit} from '../domain/limits.js';
 import {scalarErrors} from '../domain/semantics.js';
-import {diagnostic, displayPath} from '../domain/diagnostics.js';
+import {diagnostic, displayPath, pointer} from '../domain/diagnostics.js';
 const object = (value: Native) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-export async function prepareActivity(editor: Native, activity: Activity, user: Native, upload = false): Promise<Native> {
+export interface PreparationContext {
+ libraries: LibraryRepository;
+ coreApiVersion:{major:number;minor:number};
+ saveMedia?: SaveMedia;
+}
+export async function prepareActivity(context: PreparationContext, activity: Activity): Promise<Native> {
   const errors: string[] = [];
   const diagnostics: Native[] = [];
+  const transformations:Native[]=[];
   const identities = new Set();
   try { checkTree(activity.params); } catch (error: Native) {
     return {ok:false, errors:[error.message], diagnostics:[diagnostic(['params'],error.message,error.code)], warnings:[], mathematics:{detected:false}, activity:{...activity, params:{}}};
@@ -20,9 +28,10 @@ export async function prepareActivity(editor: Native, activity: Activity, user: 
   const schemas = new Map();
   let visitedFields = 0;
   let exhausted = false;
-  const usedAssets = new Set();
+  const usedAssets = new Set<string>();
   const assets = activity.assets || {};
   const fail = (at: Pointer, message: string, code = 'INVALID_PARAMETER') => { errors.push(`${displayPath(at)}: ${message}`); diagnostics.push(diagnostic(at,message,code)); };
+  for(const error of metadataErrors(activity))fail([error.field],error.message,'INVALID_METADATA');
   async function schema(library: string, at: Pointer, top = false): Promise<Native> {
     const match = /^([A-Za-z0-9][A-Za-z0-9_.-]*) ([0-9]+)\.([0-9]+)$/.exec(library || '');
     if (!match) { fail(at, 'expected exact library "Name major.minor"'); return; }
@@ -30,13 +39,13 @@ export async function prepareActivity(editor: Native, activity: Activity, user: 
     try {
       if (!schemas.has(library)) {
         if (schemas.size >= limit('LIBRARIES',1000)) throw new Error('Library node budget exceeded');
-        const metadata = await editor.libraryManager.getLibrary(version);
+        const metadata = await context.libraries.getLibrary(version);
         const core = metadata.coreApi;
-        if (core && (core.majorVersion > editor.config.coreApiVersion.major ||
-          (core.majorVersion === editor.config.coreApiVersion.major && core.minorVersion > editor.config.coreApiVersion.minor))) {
+        if (core && (core.majorVersion > context.coreApiVersion.major ||
+          (core.majorVersion === context.coreApiVersion.major && core.minorVersion > context.coreApiVersion.minor))) {
           throw Object.assign(new Error('requires a newer H5P Core'), {code:'TARGET_INCOMPATIBLE'});
         }
-        const semantics = await editor.libraryManager.getSemantics(version);
+        const semantics = await context.libraries.getSemantics(version);
         checkTree(semantics);
         schemas.set(library, { metadata, fields: semantics });
       }
@@ -56,7 +65,7 @@ export async function prepareActivity(editor: Native, activity: Activity, user: 
     }
     return result;
   }
-  const media = createMediaResolver({editor, user, upload, assets, usedAssets, warnings, fail});
+  const media = createMediaResolver({saveMedia:context.saveMedia, assets, usedAssets, warnings, fail});
   async function field(entry: Native, value: Native, at: Pointer, depth: number): Promise<Native> {
     if (exhausted) return undefined;
     if (++visitedFields > limit('NODES',100000)) { exhausted = true; fail(at,'Expanded field budget exceeded','INPUT_TOO_LARGE'); return undefined; }
@@ -91,7 +100,18 @@ export async function prepareActivity(editor: Native, activity: Activity, user: 
         return { ...value, subContentId: id,
           params: entries ? await fields(entries, value.params, [...at,'params'], depth + 1) : value.params };
       }
-      case 'text': case 'number':
+      case 'text':
+        if(typeof value==='string') {
+          const proposed=inspectText(entry,value);
+          if(proposed!==value) {
+            transformations.push({pointer:pointer(at),path:displayPath(at),before:value,after:proposed});
+            fail(at,'Text violates the supported HTML policy; review the proposed value and resubmit','CONTENT_TRANSFORMATION_REQUIRED');
+          }
+          if(entry.widget==='html'&&entry.maxLength!=null&&value.length>entry.maxLength)fail(at,`maximum HTML length ${entry.maxLength}`);
+        }
+        for (const message of scalarErrors(entry, value)) fail(at, message);
+        break;
+      case 'number':
         for (const message of scalarErrors(entry, value)) fail(at, message);
         break;
       case 'boolean': if (typeof value !== 'boolean') fail(at, 'expected boolean'); break;
@@ -111,9 +131,9 @@ export async function prepareActivity(editor: Native, activity: Activity, user: 
   }
   const entries = await schema(activity.library, ['library'], true);
   const params = entries ? await fields(entries, activity.params, ['params'], 0) : activity.params;
-  const mathematics = errors.length ? {detected:false} : await inspectMath(editor.libraryManager, params);
+  const mathematics = errors.length ? {detected:false} : await inspectMath(context.libraries, params);
   if (mathematics.error) fail(['params'], mathematics.error, 'LIBRARY_NOT_INSTALLED');
   if (mathematics.detected) warnings.add('LaTeX requires MathDisplay at playback. Check TeX syntax and rendering in the destination; this is not a symbolic answer checker.');
   for (const id of Object.keys(assets)) if (!usedAssets.has(id)) fail(['assets',id], 'asset is not referenced in a native media field');
-  return { ok: errors.length === 0, errors, diagnostics, warnings: [...warnings], mathematics, activity: { ...activity, params } };
+  return { ok: errors.length === 0, errors, diagnostics, warnings: [...warnings], mathematics, transformations, activity: { ...activity, params } };
 }

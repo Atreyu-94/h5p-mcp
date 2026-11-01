@@ -1,3 +1,5 @@
+import {resolveLibraries} from '../h5p/dependencies.js';
+import {FileLibraryRepository} from '../h5p/libraries.js';
 import type {Native, Activity} from '../domain/types.js';
 import {legacyRoot} from './runtime.js';
 import {fileURLToPath} from 'node:url';
@@ -9,8 +11,6 @@ import {limit} from '../domain/limits.js';
 const hash = (data: Native) => createHash('sha256').update(data).digest('hex');
 export async function preparationManifest(editor: Native, root: string, activity: Activity, mathematics: Native) {
   const libraries: Record<string, Native> = {};
-  const visiting = new Set();
-  let edges = 0;
   let total = 0, files = 0;
   async function digestFile(filename: string) {
     const data = await readBounded(filename, limit('ASSET_BYTES', 67108864));
@@ -18,17 +18,10 @@ export async function preparationManifest(editor: Native, root: string, activity
     if (++files > limit('ZIP_MEMBERS', 20000) || total > limit('ZIP_BYTES', 536870912)) throw new Error('Manifest file budget exceeded');
     return hash(data);
   }
-  async function add(name: string, depth = 0) {
-    if (visiting.has(name)) throw new Error('Cyclic library dependency');
-    if (depth > limit('DEPENDENCY_DEPTH',32)) throw new Error('Library dependency depth budget exceeded');
-    if (libraries[name]) return;
-    if (Object.keys(libraries).length >= limit('LIBRARIES',1000)) throw new Error('Library node budget exceeded');
-    visiting.add(name);
-    const [machineName, version] = name.split(' ');
-    const [majorVersion, minorVersion] = version.split('.').map(Number);
-    const meta = await editor.libraryManager.getLibrary({machineName, majorVersion, minorVersion});
-    const entry = libraries[name] = {patch:meta.patchVersion, files:{} as Record<string,string>};
-    const base = path.join(root, `${machineName}-${version}`);
+  const graph=await resolveLibraries(new FileLibraryRepository(root),activity,mathematics.detected);
+  for(const [name,node] of graph) {
+    const entry = libraries[name] = {patch:node.metadata.patchVersion, files:{} as Record<string,string>};
+    const base = path.join(root, `${node.version.machineName}-${node.version.majorVersion}.${node.version.minorVersion}`);
     async function walk(dir: string, depth = 0) {
       if (depth > 32) throw new Error('Library path too deep');
       for (const file of (await fs.readdir(dir, {withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))) {
@@ -39,21 +32,7 @@ export async function preparationManifest(editor: Native, root: string, activity
       }
     }
     await walk(base);
-    for (const dep of [...(meta.preloadedDependencies || []), ...(meta.dynamicDependencies || []), ...(meta.editorDependencies || [])]) {
-      if (++edges > limit('DEPENDENCY_EDGES',5000)) throw new Error('Library edge budget exceeded');
-      await add(`${dep.machineName} ${dep.majorVersion}.${dep.minorVersion}`, depth + 1);
-    }
-    visiting.delete(name);
   }
-  await add(activity.library);
-  const stack = [activity.params];
-  while (stack.length) {
-    const value = stack.pop();
-    if (!value || typeof value !== 'object') continue;
-    if (typeof value.library === 'string' && value.params) await add(value.library);
-    stack.push(...Object.values(value));
-  }
-  if (mathematics.detected) await add('H5P.MathDisplay 1.0');
   const assets: Record<string,string> = {};
   for (const [id, file] of Object.entries(activity.assets || {})) assets[id] = await digestFile(file);
   const backend: Record<string,string> = {};

@@ -1,27 +1,21 @@
 import type {Native, Pointer} from '../domain/types.js';
 import fs from 'node:fs/promises';
+import {readBounded} from './read-bounded.js';
+export {readBounded} from './read-bounded.js';
 import path from 'node:path';
-import {load} from './runtime.js';
+import {filetypeinfo} from 'magic-bytes.js';
 import {limit} from '../domain/limits.js';
 const object = (value: Native) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const failure = (message: string, code: string) => Object.assign(new Error(message), {code});
-export async function readBounded(filename: string, maximum: number) {
-  const file = await fs.open(filename, 'r');
-  try {
-    const chunks = [];
-    let total = 0;
-    while (true) {
-      const buffer = Buffer.alloc(Math.min(65536, maximum + 1 - total));
-      const {bytesRead} = await file.read(buffer);
-      if (!bytesRead) break;
-      total += bytesRead;
-      if (total > maximum) throw failure('media byte budget exceeded', 'ASSET_TOO_LARGE');
-      chunks.push(buffer.subarray(0, bytesRead));
-    }
-    return Buffer.concat(chunks);
-  } finally { await file.close(); }
+export type SaveMedia = (entry:Native,file:{name:string;mimetype:string;data:Buffer})=>Promise<Native>;
+export interface MediaContext {
+ saveMedia?: SaveMedia;
+ assets:Record<string,string>;
+ usedAssets:Set<string>;
+ warnings:Set<string>;
+ fail:(at:Pointer,message:string,code?:string)=>void;
 }
-export function createMediaResolver({editor, user, upload, assets, usedAssets, warnings, fail}: Native) {
+export function createMediaResolver({saveMedia, assets, usedAssets, warnings, fail}: MediaContext) {
   let mediaBytes = 0;
   async function media(entry: Native, value: Native, at: Pointer) {
     if (!object(value) || typeof value.path !== 'string') { fail(at, 'expected media object with path'); return value; }
@@ -59,7 +53,7 @@ export function createMediaResolver({editor, user, upload, assets, usedAssets, w
       if (!allowed.has(value.mime)) throw failure('unsupported media MIME; active HTML/SVG assets are not accepted', 'MIME_MISMATCH');
       const data = await readBounded(real, Math.min(limit('ASSET_BYTES',67108864),limit('MEDIA_BYTES',268435456)-mediaBytes));
       mediaBytes += data.length;
-      const detected = load('magic-bytes.js').filetypeinfo(data).map((type: Native)=>type.mime);
+      const detected = filetypeinfo(data).map((type: Native)=>type.mime);
       const aliases: Record<string,string> = {'audio/mp3':'audio/mpeg','audio/x-wav':'audio/wav','application/ogg':'audio/ogg','audio/vnd.wave':'audio/wav'};
       const canonical = (mime: string)=>aliases[mime] || mime;
       const vtt = value.mime === 'text/vtt' && /^(?:\uFEFF)?WEBVTT(?:[ \t]|\r?\n|$)/.test(data.toString('utf8'));
@@ -69,10 +63,10 @@ export function createMediaResolver({editor, user, upload, assets, usedAssets, w
       const comparable = (mime: string)=>containers[canonical(mime)] || canonical(mime);
       if (!vtt && !detected.some((mime: string)=>comparable(mime) === comparable(value.mime)))
         throw failure(`declared MIME ${value.mime} does not match detected bytes`, 'MIME_MISMATCH');
-      if (upload) {
+      if (saveMedia) {
         // Read a copy: upstream sanitizers/scanners must never mutate the source.
-        const saved = await editor.saveContentFile(undefined, entry,
-          { name: path.basename(filename), mimetype: value.mime, data }, user);
+        const saved = await saveMedia(entry,
+          { name: path.basename(filename), mimetype: value.mime, data });
         return { ...value, ...saved };
       }
     } catch (error: Native) {

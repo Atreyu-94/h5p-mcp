@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
-import {load} from './runtime.js';
+import {createRequire} from 'node:module';
+const load=createRequire(import.meta.url);
 import {limit,checkTree} from '../domain/limits.js';
 import type {Native} from '../domain/types.js';
 const reject=()=>Object.assign(new Error('Archive rejected'),{code:'UNSAFE_ARCHIVE'});
@@ -52,4 +53,3 @@ export async function preflight(filename:string,contentRequired=false) {
      !Array.isArray(roots['h5p.json'].preloadedDependencies)||!roots['h5p.json'].preloadedDependencies.length)) throw reject();
  }catch{throw reject();}finally{if(zip) await zip.close();}
 }
-

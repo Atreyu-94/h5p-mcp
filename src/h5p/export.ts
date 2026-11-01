@@ -1,3 +1,6 @@
+import {auditLumiSemantics} from './compatibility.js';
+import {load} from '../infrastructure/runtime.js';
+import {FileLibraryRepository} from './libraries.js';
 import type {Native} from '../domain/types.js';
 import fs from 'node:fs';
 import {finished} from 'node:stream/promises';
@@ -6,8 +9,10 @@ import {preparationManifest,sameManifest} from '../infrastructure/manifest.js';
 import {attachMathDependency} from './math.js';
 import {user} from './editor.js';
 export async function exportActivity(editor: Native,request: Native,libraries: string,report: Native) {
+    // Transitional save-specific check; media storage may legitimately add dimensions/paths.
+    if (report.ok) await auditLumiSemantics(editor, report, load);
     if (!report.ok) throw Object.assign(new Error(report.errors.join('\n')), {code:'INVALID_PARAMETER', details:report.diagnostics});
-    const uploaded = await prepareActivity(editor, report.activity, user, true);
+    const uploaded = await prepareActivity({libraries:new FileLibraryRepository(libraries),coreApiVersion:editor.config.coreApiVersion,saveMedia:(entry,file)=>editor.saveContentFile(undefined,entry,file,user)}, report.activity);
     if (!uploaded.ok) throw Object.assign(new Error(uploaded.errors.join('\n')), {code:'INVALID_PARAMETER', details:uploaded.diagnostics});
     const activity = uploaded.activity;
     const mainLibrary = activity.library;
@@ -33,6 +38,6 @@ export async function exportActivity(editor: Native,request: Native,libraries: s
     }
     const finalManifest = await preparationManifest(editor, libraries, report.activity, report.mathematics);
     if (!sameManifest(report.activity.preparation, finalManifest)) throw Object.assign(new Error('Dependencies changed during export'), {code:'STALE_PREPARATION'});
-    const saved = await editor.getContent(id, user);
-    return { h5p_json: saved.h5p, content_json: saved.params.params, preparation_manifest:report.activity.preparation };
+    const exported = await editor.getContent(id, user);
+    return { h5p_json: exported.h5p, content_json: exported.params.params, preparation_manifest:report.activity.preparation };
 }
