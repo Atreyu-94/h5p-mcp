@@ -85,3 +85,16 @@ preparation object when exporting. Source content is revalidated on each export.
 Reports leave importation, playback and grading at not_run. Structural preflight
 or corpus parity is not an independent import, Moodle playback or grade-transfer
 test. CI on other platforms and destination acceptance must be recorded separately.
+
+## Full-library native export
+
+The internal Engine request accepts `backend: "native-content"` with
+`export_mode: "with-libraries"`. Omitting export_mode retains content-only output.
+Full output includes every file in the pinned dependency closure, including editor
+libraries, translations, licenses and resources. Editor-only dependencies are
+bundled for installation and are not announced as runtime dependencies in h5p.json.
+Files are hashed before streaming into the ZIP; the final manifest check rejects
+drift before publication. Member, expanded-byte and archive-byte limits apply to
+the whole package. Public export and package installation retain their existing
+backend until the rest of their migration is complete. Full packaging does not
+certify import, playback, accessibility or grading in a destination.

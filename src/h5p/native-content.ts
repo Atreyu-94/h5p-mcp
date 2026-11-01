@@ -12,6 +12,7 @@ import {prepareActivity} from '../application/authoring.js';
 import {FileLibraryRepository} from './libraries.js';
 import {resolveLibraries,libraryVersion} from './dependencies.js';
 import {nativeManifest,sameNativeManifest} from '../infrastructure/native-manifest.js';
+import {readBounded} from '../infrastructure/read-bounded.js';
 const load=createRequire(import.meta.url);
 const fail=(code:string,message:string)=>Object.assign(new Error(message),{code});
 export async function prepareNative(activity:Activity,libraries:string) {
@@ -23,6 +24,7 @@ export async function prepareNative(activity:Activity,libraries:string) {
 export async function executeNative(request:CoreRequest) {
  if(request.action!=='prepare'&&request.action!=='export')throw fail('INVALID_PARAMETER','Native content backend supports prepare/export only');
  checkTree(request);
+ if(request.export_mode!==undefined&&!['content-only','with-libraries'].includes(request.export_mode))throw fail('INVALID_PARAMETER','Unknown export mode');
  if(!request.activity)throw fail('INVALID_PARAMETER','Activity required');
  const libraries=path.join(request.data_dir,'libraries'),report=await prepareNative(request.activity,libraries);
  if(request.action==='prepare')return report;
@@ -61,18 +63,34 @@ export async function executeNative(request:CoreRequest) {
   const h5p={title:report.activity.title,language:report.activity.language,license:report.activity.license,mainLibrary:main.version.machineName,embedTypes:modes,
    preloadedDependencies:[...preloaded].sort().map(libraryVersion),dynamicDependencies:[...dynamic].filter(name=>!preloaded.has(name)).sort().map(libraryVersion)};
   const buffers=[['h5p.json',Buffer.from(JSON.stringify(h5p))],['content/content.json',Buffer.from(JSON.stringify(uploaded.activity.params))]] as const;
-  if(buffers.some(([,bytes])=>bytes.length>Math.min(limit('JSON_BYTES',16777216),limit('ZIP_MEMBER_BYTES',134217728)))||media.size+2>limit('ZIP_MEMBERS',20000)||mediaBytes+buffers.reduce((total,[,bytes])=>total+bytes.length,0)>limit('ZIP_BYTES',536870912))throw fail('LIMIT_EXCEEDED','Package budget exceeded');
+  const libraryFiles:Array<[string,string]>=[];let libraryBytes=0;
+  if(request.export_mode==='with-libraries'){
+   // Include the installation closure, including editor-only dependencies, without
+   // announcing those dependencies as runtime scripts in h5p.json.
+   for(const [name,entry] of Object.entries(report.activity.preparation.libraries) as Array<[string,Native]>){
+    const version=libraryVersion(name),folder=`${version.machineName}-${version.majorVersion}.${version.minorVersion}`;
+    for(const [relative,digest] of Object.entries(entry.files)){
+     if(libraryFiles.length+media.size+2>=limit('ZIP_MEMBERS',20000))throw fail('LIMIT_EXCEEDED','Package member budget exceeded');
+     const filename=path.join(libraries,folder,relative),bytes=await readBounded(filename,limit('ZIP_MEMBER_BYTES',134217728));libraryBytes+=bytes.length;
+     if(libraryBytes+mediaBytes>limit('ZIP_BYTES',536870912))throw fail('LIMIT_EXCEEDED','Package byte budget exceeded');
+     if(createHash('sha256').update(bytes).digest('hex')!==digest)throw fail('STALE_PREPARATION','Library changed during export');
+     libraryFiles.push([folder+'/'+relative,filename]);
+    }
+   }
+  }
+  if(buffers.some(([,bytes])=>bytes.length>Math.min(limit('JSON_BYTES',16777216),limit('ZIP_MEMBER_BYTES',134217728)))||media.size+libraryFiles.length+2>limit('ZIP_MEMBERS',20000)||libraryBytes+mediaBytes+buffers.reduce((total,[,bytes])=>total+bytes.length,0)>limit('ZIP_BYTES',536870912))throw fail('LIMIT_EXCEEDED','Package budget exceeded');
   const {ZipFile}=load('yazl'),zip=new ZipFile();let size=0;
   const bounded=new Transform({transform(chunk,_encoding,callback){size+=chunk.length;if(size>limit('ZIP_ARCHIVE_BYTES',134217728))callback(fail('LIMIT_EXCEEDED','Package byte budget exceeded'));else callback(null,chunk);}});
   const writing=pipeline(zip.outputStream,bounded,createWriteStream(request.path,{flags:'wx'}));
   writing.catch(()=>{});
   try {
    for(const [name,bytes] of buffers)zip.addBuffer(bytes,name,{compress:false});
+   for(const [name,filename] of libraryFiles)zip.addFile(filename,name,{compress:false});
    for(const [name,filename] of media)zip.addFile(filename,'content/'+name,{compress:false});
    zip.end();await writing;
   }catch(error){zip.outputStream.destroy();await writing.catch(()=>{});throw error;}
   const after=await nativeManifest(libraries,report.activity,report.mathematics);
   if(!sameNativeManifest(report.activity.preparation,after))throw fail('STALE_PREPARATION','Files changed during export');
-  return {h5p_json:h5p,content_json:uploaded.activity.params,preparation_manifest:after,verification:{structure:'passed',semantics:'passed',importation:'not_run',playback:'not_run',grading:'not_run'},export_mode:'content-only'};
+  return {h5p_json:h5p,content_json:uploaded.activity.params,preparation_manifest:after,verification:{structure:'passed',semantics:'passed',importation:'not_run',playback:'not_run',grading:'not_run'},export_mode:request.export_mode??'content-only'};
  }finally{await fs.rm(stage,{recursive:true,force:true});}
 }

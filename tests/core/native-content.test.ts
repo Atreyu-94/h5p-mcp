@@ -107,3 +107,18 @@ test('legacy export rejects content changed by its remaining sanitizer before pu
   expect(activity.params.question).toContain('title="Keep this"');
  }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
 },30000);
+
+test('native full export preserves every pinned library file and keeps editor dependencies out of runtime metadata',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-full-native-')),engine=new Engine();
+ try{
+  await fixture(root);const activity={title:'Full quiz',language:'en',license:'U',library:'H5P.QuestionSet 1.21',params:{introPage:{showIntroPage:false},questions:[{library:'H5P.TrueFalse 1.8',params:{question:'<p>True?</p>',correct:'true'}}],endGame:{showAnimations:false,skippable:false}}};
+  const output=path.join(root,'full.h5p'),result=await engine.run({action:'export',backend:'native-content',export_mode:'with-libraries',data_dir:root,activity,path:output}) as Native;
+  expect(result.export_mode).toBe('with-libraries');await preflight(output,true);
+  const files=await entries(output);let count=2;
+  for(const [name,library] of Object.entries(result.preparation_manifest.libraries) as Array<[string,Native]>){
+   const folder=name.replace(' ','-');for(const [file,digest] of Object.entries(library.files)){count++;expect(createHash('sha256').update(files.get(folder+'/'+file)!).digest('hex')).toBe(digest as string);}
+  }
+  expect(files.size).toBe(count);expect([...files.keys()].some(name=>name.startsWith('H5PEditor.'))).toBe(true);expect([...files.keys()].some(name=>name.includes('/language/es.json'))).toBe(true);
+  expect(result.h5p_json.preloadedDependencies.some((item:Native)=>item.machineName.startsWith('H5PEditor.'))).toBe(false);expect(result.verification.importation).toBe('not_run');
+ }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
+},120000);

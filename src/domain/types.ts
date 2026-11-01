@@ -8,6 +8,7 @@ export interface Activity {
 export interface CoreRequest {
  action: 'compile'|'catalog'|'discover'|'schema'|'prepare'|'export'|'validate'|'setup'|'inspect-archive';
  backend?: 'native-content';
+ export_mode?: 'content-only'|'with-libraries';
  data_dir: string; source?: Native; activity?: Activity; path?: string; machine_name?: string;
  major_version?: number; minor_version?: number; query?: string; offset?: number; limit?: number;
  installed_only?: boolean; refresh?: boolean; install_if_missing?: boolean; packages?: string[];
