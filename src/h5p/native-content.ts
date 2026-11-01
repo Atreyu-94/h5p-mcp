@@ -20,12 +20,13 @@ export async function prepareNative(activity:Activity,libraries:string) {
  if(report.ok)report.activity.preparation=await nativeManifest(libraries,report.activity,report.mathematics);
  return report;
 }
-/** Internal content-only backend. Call through Engine for worker isolation and atomic publication. */
+/** Native prepare/export backend. Call through Engine for worker isolation and atomic publication. */
 export async function executeNative(request:CoreRequest) {
  if(request.action!=='prepare'&&request.action!=='export')throw fail('INVALID_PARAMETER','Native content backend supports prepare/export only');
  checkTree(request);
  if(request.export_mode!==undefined&&!['content-only','with-libraries'].includes(request.export_mode))throw fail('INVALID_PARAMETER','Unknown export mode');
  if(!request.activity)throw fail('INVALID_PARAMETER','Activity required');
+ if(request.action==='export'&&request.activity.preparation&&(request.activity.preparation.version!==2||request.activity.preparation.engine!=='native-content-v1'))throw fail('STALE_PREPARATION','Prepare again with the native backend');
  const libraries=path.join(request.data_dir,'libraries'),report=await prepareNative(request.activity,libraries);
  if(request.action==='prepare')return report;
  if(!report.ok)throw Object.assign(fail('INVALID_PARAMETER','Native preparation failed'),{details:report.diagnostics});

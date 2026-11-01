@@ -90,7 +90,7 @@ test('native storage supports the same verified container as both audio and vide
  }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
 },30000);
 
-test('legacy export rejects content changed by its remaining sanitizer before publication',async()=>{
+test('default export preserves permitted content without the legacy sanitizer',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-legacy-preservation-')),engine=new Engine();
  try{
   await fixture(root);
@@ -102,8 +102,9 @@ test('legacy export rejects content changed by its remaining sanitizer before pu
   const prepared=await engine.run({action:'prepare',data_dir:root,activity}) as Native;
   expect(prepared.ok).toBe(true);
   const output=path.join(root,'changed.h5p');
-  await expect(engine.run({action:'export',data_dir:root,activity:prepared.activity,path:output})).rejects.toMatchObject({code:'INVALID_PARAMETER'});
-  expect(await fs.exists(output)).toBe(false);
+  const exported=await engine.run({action:'export',data_dir:root,activity:prepared.activity,path:output}) as Native;
+  expect(exported.content_json.question).toBe(activity.params.question);
+  expect(await fs.exists(output)).toBe(true);
   expect(activity.params.question).toContain('title="Keep this"');
  }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
 },30000);

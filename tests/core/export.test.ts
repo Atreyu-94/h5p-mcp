@@ -8,7 +8,7 @@ import {isolated} from '../../src/infrastructure/worker.js';
 import {hash} from '../../src/adapters/resources.js';
 import type {Native} from '../../src/domain/types.js';
 
-test('Lumi exports the exact main-library embed modes and falls back to div when absent',async()=>{
+test('default native backend exports the exact main-library embed modes and falls back to div when absent',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-embed-regression-'));
  const fixture=new URL('../fixtures/libraries.zip',import.meta.url);
  const lock=JSON.parse(await fs.readFile(new URL('../fixtures/libraries.lock.json',import.meta.url),'utf8'));
