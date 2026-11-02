@@ -117,7 +117,8 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    for(const [id,value] of Object.entries(result.identities))if(id!==child.id)identities[child.id+'/'+id]=value as string;
    for(const [native,at] of Object.entries(result.source_map))if(native.startsWith('/params/'))sourceMap[prefix+native]=origin+at;
    sourceMap[prefix+'/library']=origin+'/library';sourceMap[prefix+'/subContentId']=origin+'/id';
-   params.questions.push({library:child.library.name,params:result.activity.params,subContentId:identities[child.id]});
+   sourceMap[prefix+'/metadata/title']=origin+'/title';
+   params.questions.push({library:child.library.name,metadata:{title:child.title},params:result.activity.params,subContentId:identities[child.id]});
   }
   if(source.feedback){
    // QuestionSet feedback is plain text, selected using the floored score percentage.

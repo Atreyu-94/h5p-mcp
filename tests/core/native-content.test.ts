@@ -145,3 +145,53 @@ test('native package validation is read-only, installation detects conflicts, an
   const installed=await query({action:'schema',install_if_missing:true,machine_name:'H5P.TrueFalse',data_dir:empty});expect(installed.library).toBe('H5P.TrueFalse 1.8');expect(hits).toBe(4);
  }finally{await server?.stop(true);await engine.close();await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test('native subcontent supplies missing titles, preserves metadata and rejects invalid shapes',async()=>{
+ const libraries={getLibrary:async()=>({runnable:1,title:'Default child title'}),getSemantics:async(version:Native)=>version.machineName==='H5P.Parent'?[{name:'child',type:'library',options:['H5P.Child 1.0']}]:[]};
+ const context={libraries,coreApiVersion:{major:1,minor:28}};
+ const input:Native={title:'Parent',language:'en',license:'U',library:'H5P.Parent 1.0',params:{child:{library:'H5P.Child 1.0',params:{}}}};
+ const before=JSON.stringify(input),prepared=await prepareActivity(context,input);
+ expect(prepared.ok).toBe(true);expect(prepared.activity.params.child.metadata).toEqual({title:'Default child title'});expect(JSON.stringify(input)).toBe(before);
+ expect((await prepareActivity(context,prepared.activity)).activity.params).toEqual(prepared.activity.params);
+ for(const metadata of [{title:'Explicit title',license:'CC BY',authors:[{name:'Teacher',role:'Author'}]},{title:''},{license:'CC BY'}]){
+  input.params.child.metadata=metadata;
+  const result=await prepareActivity(context,input);expect(result.ok).toBe(true);
+  expect(result.activity.params.child.metadata).toEqual({title:'Default child title',...metadata});
+ }
+ for(const metadata of [null,[],42,{title:null},{title:42}]){
+  input.params.child.metadata=metadata;
+  const result=await prepareActivity(context,input);expect(result.ok).toBe(false);
+  expect(result.diagnostics.some((item:Native)=>item.code==='INVALID_METADATA'&&item.pointer.startsWith('/params/child/metadata'))).toBe(true);
+ }
+});
+
+test('exported QuestionSet runs its pinned final screen for zero/full scores and exposes retry',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-final-screen-')),engine=new Engine();
+ try{
+  await fixture(root);
+  const example=JSON.parse(await fs.readFile(new URL('../../.agents/skills/h5p-authoring/examples/question-set.json',import.meta.url),'utf8'));
+  const output=path.join(root,'fixed.h5p');
+  await engine.run({action:'export',data_dir:root,path:output,activity:{language:'en',license:'U',...example}});
+  const files=await entries(output),params=JSON.parse(files.get('content/content.json')!.toString());
+  expect(params.questions[0].metadata.title).toBe('True/False Question');
+  const runtime=files.get('H5P.QuestionSet-1.21/js/questionset.js')!.toString();
+  const match=runtime.match(/var _displayEndGame = (function \(\) \{[\s\S]*?\n  \});\s*\n\s*var registerImageLoadedListener/);
+  expect(match).not.toBeNull();
+  function finish(content:Native,score:number){
+   const screens:Native[]=[],buttons:Native[]=[],completed:Native[]=[];let retries=0,shownScore=-1;
+   // Only the DOM/host boundary is stubbed; execute the unmodified final-screen function.
+   const dom:Native={0:{appendChild:()=>{}},children:()=>dom,hide:()=>dom,filter:()=>dom,remove:()=>dom,removeClass:()=>dom,append:()=>dom,html:()=>dom,show:()=>dom};
+   const self:Native={getScore:()=>score,getMaxScore:()=>1,trigger:()=>{},triggerXAPICompleted:(...args:Native[])=>completed.push(args),resetTask:()=>{retries++;},$progressAnnouncer:dom};
+   const H5P={Question:{determineOverallFeedback:()=>''},Components:{ResultScreen:(options:Native)=>{screens.push(options);return {};},Button:(options:Native)=>{buttons.push(options);return {};}},JoubelUI:{createScoreBar:()=>({appendTo:()=>{},setMaxScore:()=>{},setScore:(value:number)=>{shownScore=value;}})}};
+   runInNewContext('('+match![1]+')()',{params:content,self,H5P,$:()=>dom,$myDom:dom,rendered:false,scoreBar:undefined,questionInstances:[self],setTimeout:(fn:()=>void)=>fn(),showSolutions:()=>{},_showQuestion:()=>{}});
+   expect(completed).toEqual([[score,1,score===1]]);
+   expect(screens[0].questionGroups[0].questions).toEqual([{title:content.questions[0].metadata.title,points:score+'/1'}]);
+   expect(shownScore).toBe(score);
+   const retry=buttons.find(button=>button.class==='qs-retrybutton');expect(retry).toBeDefined();retry.onClick();expect(retries).toBe(1);
+  }
+  for(const score of [0,1])finish(params,score);
+  const broken=structuredClone(params);delete broken.questions[0].metadata;
+  expect(()=>finish(broken,1)).toThrow("title");
+ }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
+},120000);

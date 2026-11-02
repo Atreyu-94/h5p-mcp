@@ -97,7 +97,17 @@ export async function prepareActivity(context: PreparationContext, activity: Act
         if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) fail([...at,'subContentId'], 'expected UUID', 'INVALID_SUBCONTENT_ID');
         else if (identities.has(id.toLowerCase())) fail([...at,'subContentId'], 'duplicate UUID', 'DUPLICATE_SUBCONTENT_ID');
         else identities.add(id.toLowerCase());
-        return { ...value, subContentId: id,
+        let metadata = value.metadata;
+        if (metadata !== undefined && !object(metadata)) {
+          fail([...at,'metadata'], 'expected metadata object', 'INVALID_METADATA');
+        } else {
+          metadata = {...metadata};
+          // Native subcontent needs a title for composite result screens.
+          if (metadata.title === undefined) metadata.title = schemas.get(value.library)?.metadata.title || value.library;
+          if (typeof metadata.title !== 'string' || !/^.{0,255}$/.test(metadata.title))
+            fail([...at,'metadata','title'], 'expected title up to 255 characters without line breaks', 'INVALID_METADATA');
+        }
+        return { ...value, metadata, subContentId: id,
           params: entries ? await fields(entries, value.params, [...at,'params'], depth + 1) : value.params };
       }
       case 'text':
