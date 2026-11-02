@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
+import {parse as parseYaml} from 'yaml';
 import {limit} from '../domain/limits.js';
 import path from 'node:path';
 import {createHash,randomBytes} from 'node:crypto';
@@ -21,13 +22,17 @@ export class Resources {
   const names:string[]=JSON.parse(await fs.readFile(path.join(root,'resources.json'),'utf8'));
   const resources=[];
   for(const name of names) {
-   if(!/^(?:SKILL\.md|references\/[a-z-]+\.md|examples\/[a-z-]+\.json)$/.test(name)) throw new Error('Invalid packaged skill resource');
+   if(!/^(?:SKILL\.md|resources\.json|references\/[a-z-]+\.md|examples\/[a-z-]+\.json)$/.test(name)) throw new Error('Invalid packaged skill resource');
    const raw=await readBounded(path.join(root,name),262144),uri='skill://h5p-authoring/'+name;
    this.texts.set(uri,{uri,name,mimeType:name.endsWith('.json')?'application/json':'text/markdown',text:raw.toString('utf8')});
    resources.push({uri,digest:'sha256:'+hash(raw),size:raw.length});
   }
   const text=this.texts.get(skillURI)!.text;
-  this.skill={uri:skillURI,frontmatter:{name:'h5p-authoring',description:text.match(/^description: (.+)$/m)![1],license:'Apache-2.0'},resources};
+  const header=/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
+  if(!header) throw new Error('Missing packaged skill frontmatter');
+  const frontmatter=parseYaml(header[1]);
+  if(typeof frontmatter?.name!=='string'||typeof frontmatter.description!=='string') throw new Error('Invalid packaged skill frontmatter');
+  this.skill={uri:skillURI,frontmatter,resources};
  }
  snapshot(value:Native) {
   const text=JSON.stringify(canonical(value));

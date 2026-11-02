@@ -8,6 +8,7 @@ import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 import {Client,StreamableHTTPClientTransport} from '@modelcontextprotocol/client';
+import {checkPublishedSkill} from './skill-probe.mjs';
 const [entry,libraries]=process.argv.slice(2),core=path.dirname(entry);
 const {http}=await import(pathToFileURL(path.join(core,'http/server.js')).href);
 const {verifier}=await import(pathToFileURL(path.join(core,'http/auth.js')).href);
@@ -32,7 +33,7 @@ try {
   client=await connect(access,modern);
   const tools=(await client.listTools()).tools;
   assert(!JSON.stringify(tools).includes('"path":'));assert(!tools.some(t=>t.name==='install_h5p_library'));
-  assert((await client.readResource({uri:'skill://h5p-authoring/SKILL.md'})).contents.length);
+  await checkPublishedSkill(client,modern);
   await client.close();
  }
  client=await connect(access);

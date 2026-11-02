@@ -11,6 +11,7 @@
   "examples/true-false.json",
   "examples/multiple-choice.json",
   "examples/accordion.json",
-  "examples/question-set.json"
+  "examples/question-set.json",
+  "resources.json"
 ]
 

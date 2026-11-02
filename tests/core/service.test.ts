@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,readdir,writeFile,rm} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {Service} from '../../src/adapters/service.js';
@@ -23,7 +23,10 @@ test('closed public contracts reject invalid input and do not expose administrat
 });
 test('resource allowlist and artifact integrity fail closed',async()=>{
  const resources=new Resources();await resources.initialize();
- expect(resources.skill.resources).toHaveLength(13);
+ const skillDir=path.resolve(import.meta.dir,'../../.agents/skills/h5p-authoring');
+ const files=await readdir(skillDir,{recursive:true,withFileTypes:true});
+ const expected=files.filter(file=>file.isFile()).map(file=>path.relative(skillDir,path.join(file.parentPath,file.name)).split(path.sep).join('/'));
+ expect(resources.skill.resources.map((item:{uri:string})=>item.uri).sort()).toEqual(expected.map(name=>'skill://h5p-authoring/'+name).sort());
  for(const item of resources.skill.resources) {
   const text=(await resources.read(item.uri)).contents[0].text;
   expect(hash(text)).toBe(item.digest.slice(7));

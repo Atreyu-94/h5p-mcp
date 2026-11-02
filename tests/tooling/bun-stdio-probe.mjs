@@ -7,12 +7,12 @@ import {spawnSync} from 'node:child_process';
 import {Client} from '@modelcontextprotocol/client';
 import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
 import {storageProbe} from './storage-probe.mjs';
+import {checkPublishedSkill} from './skill-probe.mjs';
 const [bun,entry,libraries]=process.argv.slice(2);
 const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-f4-'));
 const env={...process.env,PATH:path.dirname(bun),H5P_MCP_DATA_DIR:path.join(root,'data'),H5P_MCP_EXPORT_DIR:path.join(root,'exports'),H5P_MCP_ADMIN_SCOPES:'',H5P_MCP_ASSET_ROOTS:JSON.stringify([root])};
 delete env.H5P_MCP_LUMI_RUNTIME;
 if(libraries) await fs.cp(libraries,path.join(root,'data/libraries'),{recursive:true});
-const shape={'~standard':{version:1,vendor:'probe',validate(value){return {value};}}};
 for(const modern of [false,true]) {
  const client=new Client({name:'f4-probe',version:'1'},modern?{versionNegotiation:{mode:'auto'}}:{});
  const args=entry.endsWith('.tgz')?['x','--bun','--package',entry,'h5p-mcp','stdio']:[entry,'stdio'];
@@ -26,22 +26,7 @@ for(const modern of [false,true]) {
   const tools=(await client.listTools()).tools;
   assert(tools.some(t=>t.name==='prepare_h5p_activity'));
   assert(!tools.some(t=>t.name==='install_h5p_library'));
-  const resources=(await client.listResources()).resources;
-  assert(resources.some(r=>r.uri.endsWith('references/security.md')));
-  const skillURI='skill://h5p-authoring/SKILL.md';
-  if(modern) {
-   const listed=await client.request({method:'skills/list',params:{}},shape);
-   assert.equal(listed.skills.length,1);
-   const skill=listed.skills[0];
-   assert.equal(skill.resources.length,13);
-   assert.deepEqual((await client.request({method:'skills/get',params:{uri:skillURI}},shape)).skill,skill);
-   for(const item of skill.resources) {
-    const text=(await client.readResource({uri:item.uri})).contents[0].text;
-    assert.equal(Buffer.byteLength(text),item.size);
-    assert.equal('sha256:'+createHash('sha256').update(text).digest('hex'),item.digest);
-   }
-   await assert.rejects(client.request({method:'skills/get',params:{uri:skillURI+'/../security.md'}},shape));
-  } else assert((await client.readResource({uri:skillURI})).contents[0].text.includes('prepare_h5p_activity'));
+  await checkPublishedSkill(client,modern);
   await assert.rejects(client.readResource({uri:'file:///etc/passwd'}));
   const invalid=await client.callTool({name:'prepare_h5p_activity',arguments:{}});
   assert.equal(invalid.isError,false);
