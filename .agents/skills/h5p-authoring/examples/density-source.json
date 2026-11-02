@@ -1,0 +1,62 @@
+{
+  "schema_version": "1",
+  "project_id": "matter",
+  "id": "density",
+  "type": "multi_choice",
+  "title": "Two samples in the lab",
+  "library": {
+    "name": "H5P.MultiChoice 1.16",
+    "patch": 27,
+    "semantics_sha256": "57435fbb96627f7de33e3289d266aa78cccb95148ff44141818a06c2d1ea4f55"
+  },
+  "language": "en",
+  "ui": {
+    "language": "en"
+  },
+  "question": {
+    "format": "markdown",
+    "value": "**Sample A** has a mass of 200 g and a volume of 100 cm³.\n\n**Sample B** has a mass of 400 g and a volume of 200 cm³.\n\nPredict how the density of sample B compares with the density of sample A."
+  },
+  "mode": "single",
+  "scoring": "all_or_nothing",
+  "retry": true,
+  "show_solution": false,
+  "correct_ids": [
+    "equal"
+  ],
+  "choices": [
+    {
+      "id": "double",
+      "text": {
+        "format": "plain",
+        "value": "It is twice as dense."
+      },
+      "selected_feedback": {
+        "format": "plain",
+        "value": "The mass doubles. Compare the mass of one cubic centimetre of each sample."
+      }
+    },
+    {
+      "id": "equal",
+      "text": {
+        "format": "plain",
+        "value": "It has the same density."
+      },
+      "selected_feedback": {
+        "format": "plain",
+        "value": "Each sample has 2 g per cm³. Explain to a partner why doubling both quantities leaves their ratio unchanged."
+      }
+    },
+    {
+      "id": "half",
+      "text": {
+        "format": "plain",
+        "value": "It is half as dense."
+      },
+      "selected_feedback": {
+        "format": "plain",
+        "value": "The volume doubles. Check what happens to the mass before comparing the samples again."
+      }
+    }
+  ]
+}

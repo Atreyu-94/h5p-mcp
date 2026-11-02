@@ -12,6 +12,9 @@
   "examples/multiple-choice.json",
   "examples/accordion.json",
   "examples/question-set.json",
+  "references/question-design.md",
+  "references/visual-design.md",
+  "references/ngss.md",
+  "examples/density-source.json",
   "resources.json"
 ]
-

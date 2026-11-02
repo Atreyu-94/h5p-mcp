@@ -34,6 +34,7 @@ try{
  await client.connect(transport);
  const tools=(await client.listTools()).tools;for(const name of ['compile_h5p_source','check_h5p_source','build_h5p_source'])assert(tools.some(t=>t.name===name));
  assert((await client.readResource({uri:'h5p-authoring://v1/schema'})).contents[0].text.includes('schema_version'));
+ examples.push(JSON.parse((await client.readResource({uri:'skill://h5p-authoring/examples/density-source.json'})).contents[0].text));
  for(const [index,source] of examples.entries()){
   const file=path.join(root,`source-${index}.json`);await fs.writeFile(file,JSON.stringify(source));
   const expected=cli('compile',file),checked=cli('check',file);assert(expected.ok);assert.deepEqual(checked.activity,expected.activity);
