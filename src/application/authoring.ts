@@ -1,3 +1,4 @@
+import {escapeHtml} from '../domain/authoring-source.js';
 import {inspectText,metadataErrors} from '../domain/content-policy.js';
 import type {LibraryRepository} from '../h5p/libraries.js';
 import type {Native, Activity, Pointer} from '../domain/types.js';
@@ -103,9 +104,16 @@ export async function prepareActivity(context: PreparationContext, activity: Act
         } else {
           metadata = {...metadata};
           // Native subcontent needs a title for composite result screens.
-          if (metadata.title === undefined) metadata.title = schemas.get(value.library)?.metadata.title || value.library;
+          if (metadata.title === undefined) metadata.title = escapeHtml(schemas.get(value.library)?.metadata.title || value.library);
           if (typeof metadata.title !== 'string' || !/^.{0,255}$/.test(metadata.title))
             fail([...at,'metadata','title'], 'expected title up to 255 characters without line breaks', 'INVALID_METADATA');
+          else {
+            const proposed=inspectText({tags:[]},metadata.title);
+            if(proposed!==metadata.title){
+              transformations.push({pointer:pointer([...at,'metadata','title']),path:displayPath([...at,'metadata','title']),before:metadata.title,after:proposed});
+              fail([...at,'metadata','title'],'Title violates the supported HTML policy; review the proposed value and resubmit','CONTENT_TRANSFORMATION_REQUIRED');
+            }
+          }
         }
         return { ...value, metadata, subContentId: id,
           params: entries ? await fields(entries, value.params, [...at,'params'], depth + 1) : value.params };

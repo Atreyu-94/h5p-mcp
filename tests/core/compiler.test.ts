@@ -147,9 +147,10 @@ test('QuestionSet children inherit UI defaults while retaining explicit child ov
   expect(result.activity.params.questions[0].params.l10n).toMatchObject({trueText:'Sí',falseText:'Falso'});
   expect(result.activity.params.questions[0].metadata).toEqual({title:child.title});
   expect(result.source_map['/params/questions/0/metadata/title']).toBe('/questions/0/title');
-  child.ui.language='en';
+  child.ui.language='en';child.title='A & <img src=x onerror=alert(1)>';
   const english=await compileSource(source,path.join(root,'libraries'));
   expect(english.diagnostics).toEqual([]);
+  expect(english.activity.params.questions[0].metadata.title).toBe('A &amp; &lt;img src=x onerror=alert(1)&gt;');
   expect(english.activity.params.questions[0].params.l10n).toMatchObject({trueText:'Sí',falseText:'False'});
   child.ui={language:'zz'};
   expect((await compileSource(source,path.join(root,'libraries'))).ok).toBe(true);

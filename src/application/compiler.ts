@@ -6,7 +6,7 @@ import {FileLibraryRepository} from '../h5p/libraries.js';
 import {libraryVersion} from '../h5p/dependencies.js';
 import {prepareNative} from '../h5p/native-content.js';
 import {checkTree} from '../domain/limits.js';
-import {semanticHash,stableId,renderText} from '../domain/authoring-source.js';
+import {semanticHash,stableId,renderText,escapeHtml} from '../domain/authoring-source.js';
 import type {Native} from '../domain/types.js';
 const read=(name:string)=>JSON.parse(fs.readFileSync(path.join(repositoryRoot,'h5p_mcp/contracts',name),'utf8'));
 export const authoringSchema=read('authoring-v1.json'),adapters=read('authoring-adapters-v1.json');
@@ -118,7 +118,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    for(const [native,at] of Object.entries(result.source_map))if(native.startsWith('/params/'))sourceMap[prefix+native]=origin+at;
    sourceMap[prefix+'/library']=origin+'/library';sourceMap[prefix+'/subContentId']=origin+'/id';
    sourceMap[prefix+'/metadata/title']=origin+'/title';
-   params.questions.push({library:child.library.name,metadata:{title:child.title},params:result.activity.params,subContentId:identities[child.id]});
+   params.questions.push({library:child.library.name,metadata:{title:escapeHtml(child.title)},params:result.activity.params,subContentId:identities[child.id]});
   }
   if(source.feedback){
    // QuestionSet feedback is plain text, selected using the floored score percentage.

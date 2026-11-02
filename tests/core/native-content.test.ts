@@ -158,6 +158,11 @@ test('native subcontent supplies missing titles, preserves metadata and rejects 
   const result=await prepareActivity(context,input);expect(result.ok).toBe(true);
   expect(result.activity.params.child.metadata).toEqual({title:'Default child title',...metadata});
  }
+ for(const title of ['<img src=x onerror=alert(1)>','<svg onload=alert(1)>x</svg>','<a href="javascript:alert(1)">x</a>']){
+  input.params.child.metadata={title};const result=await prepareActivity(context,input);
+  expect(result.ok).toBe(false);expect(result.diagnostics.some((item:Native)=>item.code==='CONTENT_TRANSFORMATION_REQUIRED')).toBe(true);
+  expect(result.transformations[0].pointer).toBe('/params/child/metadata/title');expect(input.params.child.metadata.title).toBe(title);
+ }
  for(const metadata of [null,[],42,{title:null},{title:42}]){
   input.params.child.metadata=metadata;
   const result=await prepareActivity(context,input);expect(result.ok).toBe(false);

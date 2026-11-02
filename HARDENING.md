@@ -19,6 +19,8 @@ Language must also be accepted by Intl.Locale. Tags such as es-419 remain
 unsupported rather than silently shortened. The native backend uses manifests
 version 2; version 1 preparations require explicit re-preparation before export. Existing artifact bytes remain readable.
 
+Nested library objects receive missing metadata titles from their library title; explicit metadata and titles are preserved. The source compiler HTML-escapes each QuestionSet child title for the result screen. Native metadata titles use the existing HTML policy; unsafe changes are proposed, never silently applied. Invalid metadata objects or title types are rejected. These defaults support composite result screens and do not certify Moodle playback.
+
 Missing nested `subContentId` values receive UUIDs. Supplied UUIDs must be valid
 and unique within the activity; valid identities survive repeated preparation.
 To intentionally duplicate a subtree, remove its IDs before preparing the new
