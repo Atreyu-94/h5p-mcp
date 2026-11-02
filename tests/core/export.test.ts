@@ -4,12 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {load} from '../../src/infrastructure/runtime.js';
+import {Engine} from '../../src/application/engine.js';
 import {isolated} from '../../src/infrastructure/worker.js';
 import {hash} from '../../src/adapters/resources.js';
 import type {Native} from '../../src/domain/types.js';
 
 test('default native backend exports the exact main-library embed modes and falls back to div when absent',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-embed-regression-'));
+ const engine=new Engine();
  const fixture=new URL('../fixtures/libraries.zip',import.meta.url);
  const lock=JSON.parse(await fs.readFile(new URL('../fixtures/libraries.lock.json',import.meta.url),'utf8'));
  try {
@@ -41,8 +43,9 @@ test('default native backend exports the exact main-library embed modes and fall
    }}finally{await exported.close();}
    expect(packaged.embedTypes).toEqual(modes||['div']);
    expect(packaged.mainLibrary).toBe('H5P.TrueFalse');
-   const imported=await isolated({action:'validate',data_dir:root,path:output},AbortSignal.timeout(30000)) as Native;
+   // A file cannot serve as a library store. Validation must use only the package.
+   const imported=await engine.run({action:'validate',data_dir:output,path:output},AbortSignal.timeout(30000)) as Native;
    expect(imported.ok).toBe(true);
   }
- }finally{await fs.rm(root,{recursive:true,force:true});}
+ }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
 },150000);

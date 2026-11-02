@@ -12,12 +12,13 @@ export class Engine {
   return this.pool.run(async()=>{
    const mutation=request.action==='setup'||request.refresh||request.install_if_missing;
    if(mutation) return exclusive(request.data_dir,signal,()=>isolated(request,signal));
+   if(request.action==='validate') return isolated(request,signal);
    const snapshot=await exclusive(request.data_dir,signal,()=>this.generations.acquire(request.data_dir,signal));
    try {
     const pinned={...request,data_dir:snapshot.root};
     // Keep untrusted semantics/ZIP work killable; persistent queries share the bounded schema cache.
     if(request.action==='export') return await publish(pinned,signal);
-    if(['compile','prepare','validate'].includes(request.action)) return await isolated(pinned,signal);
+    if(request.action==='compile'||request.action==='prepare') return await isolated(pinned,signal);
     // Load query execution only after acquiring the immutable generation.
     const {execute}=await import('./execute.js');
     return await execute(pinned);
