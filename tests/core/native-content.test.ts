@@ -40,7 +40,7 @@ test('native content backend exports corpus, verified media and runtime dependen
   examples.push({title:'Blanks',library:'H5P.Blanks 1.14',params:{text:'<p>Complete</p>',questions:['A *metre*.']}});
   examples.push({title:'Math',library:'H5P.TrueFalse 1.8',params:{question:'<p>\\(1+1=2\\)</p>',correct:'true'}});
   const image=path.join(root,'image.png'),png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ioAAAAASUVORK5CYII=','base64');await fs.writeFile(image,png);
-  examples.push({title:'Image',library:'H5P.TrueFalse 1.8',assets:{image},params:{question:'<p>Image?</p>',correct:'true',media:{type:{library:'H5P.Image 1.1',params:{file:{path:'asset:image',mime:'image/png'},alt:'Image'}}}}});
+  examples.push({title:'Image',library:'H5P.TrueFalse 1.8',assets:{image},params:{question:'<p>Image?</p>',correct:'true',media:{type:{library:'H5P.Image 1.1',subContentId:'5db4df58-e94d-42f0-aafc-c2e3bc4b8c70',params:{file:{path:'asset:image',mime:'image/png'},alt:'Image'}}}}});
   for(const [index,example] of examples.entries()){
    const activity={language:'en',license:'U',...example},request={backend:'native-content' as const,data_dir:root};
    const prepared=await engine.run({...request,action:'prepare',activity}) as Native;expect(prepared.ok).toBe(true);expect(prepared.activity.preparation.version).toBe(2);
@@ -51,7 +51,22 @@ test('native content backend exports corpus, verified media and runtime dependen
    expect(metadata).not.toHaveProperty('dynamicDependencies');expect(metadata.mainLibrary).toBe(example.library.split(' ')[0]);expect(content).toEqual(result.content_json);
    expect(metadata.preloadedDependencies.some((item:Native)=>item.machineName.startsWith('H5PEditor'))).toBe(false);
    if(example.title==='Math'){expect(content.question).toBe(example.params.question);expect(metadata.preloadedDependencies.some((item:Native)=>item.machineName==='H5P.MathDisplay')).toBe(true);}
-   if(example.title==='Image'){expect(files.get('content/'+content.media.type.params.file.path)).toEqual(png);expect(content.media.type.params.file.width).toBe(1);}
+   if(example.title==='Image'){
+    expect(files.get('content/'+content.media.type.params.file.path)).toEqual(png);
+    expect(content.media.type.params.file.width).toBe(1);
+    // Reuse the approved preparation in a new engine and verify its portable delivery.
+    const reopened=new Engine(),portable=path.join(root,'portable-image.h5p');
+    try{
+     await reopened.run({action:'export',data_dir:root,activity:prepared.activity,path:portable});
+     const members=await entries(portable);
+     expect(members.get('content/content.json')).toEqual(files.get('content/content.json'));
+     expect(members.get('content/'+content.media.type.params.file.path)).toEqual(png);
+     expect(content.media.type.subContentId).toBe(example.params.media.type.subContentId);
+     expect(content.media.type.params.alt).toBe('Image');
+     expect(members.has('H5P.Image-1.1/library.json')).toBe(true);
+     expect(await reopened.run({action:'validate',data_dir:root,path:portable})).toMatchObject({ok:true});
+    }finally{await reopened.close();}
+   }
   }
  }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
 },120000);
