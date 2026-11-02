@@ -1,14 +1,14 @@
 {
-  "title": "Magnitudes",
+  "title": "Physical quantities",
   "library": "H5P.Accordion 1.0",
   "params": {
     "panels": [
       {
-        "title": "Masa",
+        "title": "Mass",
         "content": {
           "library": "H5P.AdvancedText 1.1",
           "params": {
-            "text": "<p>La masa es escalar: se expresa con un valor y una unidad.</p>"
+            "text": "<p>Mass is a scalar quantity. Specify its magnitude and unit.</p>"
           }
         }
       }

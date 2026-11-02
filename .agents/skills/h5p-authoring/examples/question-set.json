@@ -1,5 +1,5 @@
 {
-  "title": "Repaso de magnitudes",
+  "title": "Physical quantities review",
   "library": "H5P.QuestionSet 1.21",
   "params": {
     "introPage": {
@@ -13,7 +13,7 @@
       {
         "library": "H5P.TrueFalse 1.8",
         "params": {
-          "question": "<p>La masa es una magnitud escalar.</p>",
+          "question": "<p>Mass is a scalar quantity.</p>",
           "correct": "true"
         }
       }

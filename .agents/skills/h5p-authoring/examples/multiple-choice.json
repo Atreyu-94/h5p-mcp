@@ -1,15 +1,15 @@
 {
-  "title": "Unidad de longitud",
+  "title": "Unit of length",
   "library": "H5P.MultiChoice 1.16",
   "params": {
-    "question": "<p>¿Cuál es una unidad de longitud del SI?</p>",
+    "question": "<p>Which is an SI unit of length?</p>",
     "answers": [
       {
-        "text": "<p>Metro</p>",
+        "text": "<p>Metre</p>",
         "correct": true
       },
       {
-        "text": "<p>Segundo</p>",
+        "text": "<p>Second</p>",
         "correct": false
       }
     ]

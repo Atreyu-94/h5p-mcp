@@ -16,6 +16,7 @@
 
 - Antes de añadir archivos a Git, comprueba git status y git check-ignore. No añadas planes ni materiales locales con git add -f.
 - La skill del producto tiene una única fuente en .agents/skills/h5p-authoring/. El runtime y el paquete deben cargar esa misma ruta; no mantengas copias divergentes.
+- Escribe toda la skill distribuida en inglés, incluidos referencias, ejemplos, feedback y textos de interfaz de las muestras. Al crear una actividad para un docente, respeta el idioma solicitado.
 - Lee README.md y HARDENING.md para los flujos y límites del producto. Consulta docs/architecture/ para las decisiones técnicas. Los planes locales contienen seguimiento histórico y no sustituyen el estado observable del código.
 
 ## PowerShell
@@ -55,7 +56,7 @@
 - Realiza pruebas proporcionales al riesgo y declara cualquier comprobación incompleta o no realizada.
 - Prefiere soluciones simples, legibles y documentadas.
 - Antes de añadir complejidad por un caso especulativo o una carrera remota o improbable, explica el fallo concreto, su probabilidad y el coste en complejidad, y obtén aprobación. No amplíes el alcance por robustez teórica.
-- Para cambios de la skill, comprueba descubrimiento MCP, lectura e integridad de sus 13 recursos y empaquetado instalado fuera del checkout.
+- Para cambios de la skill, comprueba descubrimiento MCP, lectura e integridad de todos sus recursos y empaquetado instalado fuera del checkout.
 - Distingue validación estructural/importación de reproducción, accesibilidad y transferencia de calificaciones en Moodle. No inventes comprobaciones aprobadas.
 
 ## Commits
