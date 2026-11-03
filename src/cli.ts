@@ -36,9 +36,9 @@ try {
       };
       const manifest=JSON.parse(await input('manifest.json',65536));
       const {renderTypstFigure,checkFigureProject}=await import('./infrastructure/typst-sandbox.js');
-      checkFigureProject(manifest);
+      const lockedProfile=checkFigureProject(manifest);
       const source=await input('figure.typ',65536);
-      console.log(JSON.stringify(await renderTypstFigure({source,alt:manifest.image?.alt},output,controller.signal)));
+      console.log(JSON.stringify(await renderTypstFigure({source,alt:manifest.image?.alt},output,controller.signal,lockedProfile)));
      }else{
       const input=await service.authorize(path.resolve(args[1]),'ASSET');
       console.log(JSON.stringify(await renderForceFigure(input,output,controller.signal)));

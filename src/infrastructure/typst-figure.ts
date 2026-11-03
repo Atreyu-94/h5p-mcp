@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import {profile,sha,verifyProfile} from './typst-profile.js';
+import {originalProfile,sha,verifyProfile} from './typst-profile.js';
 import {invoke} from './typst-process.js';
 import {managedExecutable,typstVersion} from './typst-compiler.js';
 import {compileSinglePage,pixelsPerInch} from './typst-page.js';
@@ -51,7 +51,7 @@ export async function figureStatus(signal?:AbortSignal) {
  }
  if(detected.split(/\s+/).slice(0,2).join(' ')!=='typst '+version)return {state:'incompatible',detected,expected:version} as const;
  const packages=process.env.H5P_MCP_TYPST_PACKAGES||'';
- try{await verifyProfile(packages);}
+ try{await verifyProfile(packages,undefined,originalProfile);}
  catch(error){return {state:'profile-incomplete',reason:(error as Error).message} as const;}
  return {state:'ready',provider:explicit?'explicit':provider,executable,detected,packages} as const;
 }
@@ -68,7 +68,7 @@ export async function renderForceSpec(input:Partial<Spec>,output:string,signal?:
  try{
   const root=path.join(work,'source'),packages=path.join(work,'packages'),cache=path.join(work,'cache');
   await fs.mkdir(root);await fs.mkdir(cache);
-  await verifyProfile(status.packages,packages);
+  await verifyProfile(status.packages,packages,originalProfile);
   const json=JSON.stringify(spec,null,2)+'\n';
   await fs.writeFile(path.join(root,'figure.typ'),source);await fs.writeFile(path.join(root,'figure.json'),json);
   const files:Record<string,Buffer>={'figure.typ':Buffer.from(source),'figure.json':Buffer.from(json)};
@@ -76,7 +76,7 @@ export async function renderForceSpec(input:Partial<Spec>,output:string,signal?:
   files['figure.svg']=page.svg;
   files['figure.png']=page.png;
   const manifest={version:1,template:'vertical-equilibrium',compiler:status.detected,
-   compilerSha256:sha(await readBounded(status.executable,128*1024*1024)),packages:profile,fonts:'embedded',ppi:pixelsPerInch,
+   compilerSha256:sha(await readBounded(status.executable,128*1024*1024)),packages:originalProfile,fonts:'embedded',ppi:pixelsPerInch,
    image:{path:'figure.png',mime:'image/png',width:page.pngWidth,height:page.pngHeight,alt:spec.alt},master:{path:'figure.svg',mime:'image/svg+xml',width:page.widthPt,height:page.heightPt,unit:'pt'},
    hashes:Object.fromEntries(Object.entries(files).map(([name,data])=>[name,sha(data)]))};
   return await publishFigure(output,files,manifest,signal);

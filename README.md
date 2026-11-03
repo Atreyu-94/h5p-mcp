@@ -24,7 +24,7 @@ and [native backend contract](docs/architecture/011-native-content.md).
 
 The local CLI and stdio MCP can render a vertical equilibrium diagram with two
 equal, opposite forces. On a new host, enable the feature, install the pinned
-Typst compiler and prepare the CeTZ 0.5.3 / oxifmt 1.0.0 package profile:
+Typst compiler and prepare the pinned scientific package profile:
 
 ```powershell
 $env:H5P_MCP_TYPST_ENABLED = '1'
@@ -80,8 +80,8 @@ before rasterizing.
 For AI-authored diagrams, enable the local stdio tool `render_typst_figure` with
 `H5P_MCP_TYPST_ENABLED=1`, `H5P_MCP_TYPST_SANDBOX=docker` and the verified
 `H5P_MCP_TYPST_PACKAGES` directory from figure setup. Supply `source` (one
-editable Typst document, up to 64 KiB) and `alt`. Use built-ins or import
-`@preview/cetz:0.5.3`. The bundle contains the original source, SVG master
+editable Typst document, up to 64 KiB) and `alt`. Use built-ins or the pinned scientific packages. For drawings use
+`@preview/cetz:0.5.3`, for data plots `@preview/lilaq:0.6.0`, for chemical notation `@preview/chemformula:0.1.3` and for molecular structures `@preview/typed-smiles:0.13.0`. To upgrade an existing CeTZ-only installation, run `figure setup` into a new directory and point `H5P_MCP_TYPST_PACKAGES` there. Rebuilding a saved figure uses its recorded profile. The bundle contains the original source, SVG master
 and PNG. Only the raster is served as an MCP preview or embedded in H5P.
 
 Prepare a local Linux Docker Engine and explicitly pull the pinned official
@@ -114,6 +114,8 @@ without Typst. For a revision, edit a copy of the figure directory, then run
 `h5p-mcp figure rebuild /path/to/edited-copy /path/to/new-figure` with the
 offline renderer enabled. Point the activity's asset at the new PNG and freeze
 a new project. The reader supports both v1 and v2. Exact reconstruction in either format requires the backend recorded in the project lock.
+
+See the [scientific figure examples](examples/scientific-figures/README.md) for editable source and Spanish prompts, visible data alternatives and feedback.
 
 ## Workflow
 

@@ -6,7 +6,7 @@ import type {Native} from '../domain/types.js';
 import {publishFigure} from './typst-figure.js';
 import {renderSinglePage,pixelsPerInch} from './typst-page.js';
 import {runFigureProcess} from './typst-process.js';
-import {profile,sha,verifyProfile} from './typst-profile.js';
+import {originalProfile,profile,sha,verifyProfile} from './typst-profile.js';
 
 export const sandboxImage='ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f';
 const unavailable=(message:string)=>Object.assign(new Error(message),{code:'RENDERER_UNAVAILABLE'});
@@ -14,12 +14,14 @@ const endpoint=process.platform==='win32'?'npipe:////./pipe/dockerDesktopLinuxEn
 
 /** Pre-policy-field bundles used the same pinned compiler, fonts, packages and render settings. */
 export function checkFigureProject(manifest:Native) {
- if(manifest?.version!==1||manifest.imageDigest!==sandboxImage||
+ const selected=[profile,originalProfile].find(candidate=>manifest?.packages &&
+  Object.keys(manifest.packages).length===Object.keys(candidate).length &&
+  Object.entries(candidate).every(([name,digest])=>manifest.packages[name]===digest));
+ if(!selected||manifest.version!==1||manifest.imageDigest!==sandboxImage||
     (manifest.renderPolicy!==undefined&&manifest.renderPolicy!=='offline-single-page-v1')||
-    manifest.fonts!=='embedded'||manifest.ppi!==pixelsPerInch||
-    !manifest.packages||Object.keys(manifest.packages).length!==Object.keys(profile).length||
-    Object.entries(profile).some(([name,digest])=>manifest.packages[name]!==digest))
+    manifest.fonts!=='embedded'||manifest.ppi!==pixelsPerInch)
   throw new Error('Unsupported figure project or renderer policy.');
+ return selected;
 }
 
 function docker(args:string[],signal?:AbortSignal,maxStdout=65536) {
@@ -75,7 +77,7 @@ async function compile(root:string,packages:string,format:'svg'|'png',signal?:Ab
  }
 }
 
-export async function renderTypstFigure(input:Native,output:string,signal?:AbortSignal) {
+export async function renderTypstFigure(input:Native,output:string,signal?:AbortSignal,lockedProfile?:typeof profile) {
  if(process.env.H5P_MCP_TYPST_ENABLED!=='1'||process.env.H5P_MCP_TYPST_SANDBOX!=='docker')
   throw unavailable('Enable the local Docker Typst sandbox.');
  if(typeof input.source!=='string'||!input.source.trim()||Buffer.byteLength(input.source)>65536||
@@ -87,12 +89,17 @@ export async function renderTypstFigure(input:Native,output:string,signal?:Abort
  try{
   const root=path.join(work,'input'),packages=path.join(work,'packages');
   await fs.mkdir(root);
-  await verifyProfile(process.env.H5P_MCP_TYPST_PACKAGES||'',packages);
+  const configured=process.env.H5P_MCP_TYPST_PACKAGES||'';
+  if(!path.isAbsolute(configured))throw unavailable('Configure the absolute Typst package profile directory.');
+  const installed=await fs.readdir(path.join(configured,'preview'));
+  const scientific=installed.some(name=>['lilaq','chemformula','typed-smiles','elembic','tiptoe','zero'].includes(name));
+  const selected=lockedProfile??(scientific?profile:originalProfile);
+  await verifyProfile(configured,packages,selected);
   const source=Buffer.from(input.source);
   await fs.writeFile(path.join(root,'figure.typ'),source,{mode:0o644});
   const page=await renderSinglePage(format=>compile(root,packages,format,signal));
   const files={'figure.typ':source,'figure.svg':page.svg,'figure.png':page.png};
-  const manifest={version:1,renderPolicy:'offline-single-page-v1',compiler:'Typst 0.15.1',imageDigest:sandboxImage,packages:profile,fonts:'embedded',ppi:pixelsPerInch,
+  const manifest={version:1,renderPolicy:'offline-single-page-v1',compiler:'Typst 0.15.1',imageDigest:sandboxImage,packages:selected,fonts:'embedded',ppi:pixelsPerInch,
    image:{path:'figure.png',mime:'image/png',width:page.pngWidth,height:page.pngHeight,alt:input.alt},
    master:{path:'figure.svg',mime:'image/svg+xml',width:page.widthPt,height:page.heightPt,unit:'pt'},
    hashes:Object.fromEntries(Object.entries(files).map(([file,bytes])=>[file,sha(bytes)]))};

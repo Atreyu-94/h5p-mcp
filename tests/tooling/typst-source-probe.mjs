@@ -13,8 +13,15 @@ try{
   env:{...process.env,H5P_MCP_DATA_DIR:path.join(root,'data'),H5P_MCP_STORE_DIR:path.join(root,'store'),
    H5P_MCP_EXPORT_DIR:root,H5P_MCP_EXPORT_ROOTS:JSON.stringify([root])},stderr:'pipe'}));
  assert((await client.listTools()).tools.some(tool=>tool.name==='render_typst_figure'));
- for(const [file,alt] of [['parabola','Parábola y = x²'],['energy','Transición ascendente del nivel E1 al nivel E2']]){
-  const source=await fs.readFile(new URL('../fixtures/typst/'+file+'.typ',import.meta.url),'utf8');
+ const exampleDir=new URL('../../examples/scientific-figures/',import.meta.url);
+ const examples=JSON.parse(await fs.readFile(new URL('learner-es.json',exampleDir),'utf8'));
+ const inputs=[
+  ...[['parabola','Parábola y = x²'],['energy','Transición ascendente del nivel E1 al nivel E2']].map(([file,alt])=>({
+   file,alt,url:new URL('../fixtures/typst/'+file+'.typ',import.meta.url)})),
+  ...examples.map(({file,alt})=>({file,alt,url:new URL(file,exampleDir)})),
+ ];
+ for(const {file,alt,url} of inputs){
+  const source=await fs.readFile(url,'utf8');
   const reply=await client.callTool({name:'render_typst_figure',arguments:{source,alt}});
   assert(reply.structuredContent?.ok,JSON.stringify(reply.content));
   const {directory,preview,manifest}=reply.structuredContent;

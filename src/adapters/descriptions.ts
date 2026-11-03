@@ -1,5 +1,5 @@
 export const descriptions:Record<string,string>={
- render_typst_figure:'Compile one editable Typst source and alternative text in the local offline sandbox. Use Typst built-ins or the pinned CeTZ package. Returns the local SVG master, stored PNG asset and preview.',
+ render_typst_figure:'Compile one editable Typst source and alternative text in the local offline sandbox. Use CeTZ for drawings, Lilaq for data plots, chemformula for chemical notation and typed-smiles for 2D molecular structures with the scientific profile installed. Returns the local SVG master, stored PNG asset and preview.',
  render_force_figure:'Render a local two-force equilibrium diagram from forceN (newtons), upLabel, downLabel and alternative text. Returns a PNG preview, reusable stored asset ID and editable local bundle. Requires host-enabled Typst.',
  compile_h5p_source:'Compile one versioned JSON source to a prepared native activity using pinned adapters and libraries. Returns source diagnostics, stable identities and a source map; no Lumi or installation.',
  check_h5p_source:'Check a versioned JSON source and its installed dependencies without writing a package. Uses the same independent compiler as build.',

@@ -4,13 +4,24 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {Service} from '../../src/adapters/service.js';
-import {renderTypstFigure} from '../../src/infrastructure/typst-sandbox.js';
+import {originalProfile,profile} from '../../src/infrastructure/typst-profile.js';
+import {checkFigureProject,sandboxImage,renderTypstFigure} from '../../src/infrastructure/typst-sandbox.js';
 
 const dockerTest=test.skipIf(process.env.H5P_TEST_TYPST_DOCKER!=='1');
 const figures=[
  {file:'parabola',alt:'Graph of y = x squared between -1 and 1'},
  {file:'energy',alt:'Two energy levels E1 and E2 with an upward transition'},
 ];
+
+test('editable projects accept either exact package lock and reject mixed or altered locks',()=>{
+ const manifest={version:1,imageDigest:sandboxImage,fonts:'embedded',ppi:192};
+ for(const packages of [originalProfile,profile]){
+  expect(checkFigureProject({...manifest,packages})).toEqual(packages);
+ }
+ const lilaq='preview/lilaq/0.6.0';
+ expect(()=>checkFigureProject({...manifest,packages:{...originalProfile,[lilaq]:profile[lilaq]}})).toThrow();
+ expect(()=>checkFigureProject({...manifest,packages:{...profile,[lilaq]:'unverified'}})).toThrow();
+});
 
 dockerTest('independent authored drawings compile through local MCP and yield editable source, SVG and stored PNG',async()=>{
  const work=await fs.mkdtemp(path.join(os.tmpdir(),'typst-e2e-'));

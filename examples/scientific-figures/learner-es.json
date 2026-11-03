@@ -1,0 +1,38 @@
+[
+  {
+    "file": "motion.typ",
+    "caption": "Posición de un móvil durante seis segundos. Los segmentos rectos unen las lecturas.",
+    "alt": "Gráfica de posición frente al tiempo. Las cuatro lecturas se incluyen junto a la pregunta.",
+    "description": "Tiempo en segundos y posición en metros: (0, 0), (2, 4), (4, 4), (6, 2).",
+    "prompt": "¿Entre qué dos lecturas permaneció constante la posición?",
+    "retry": "Compara las posiciones en los extremos de cada intervalo.",
+    "feedback": "Entre 2 y 4 s, ambas lecturas son de 4 m. El segmento horizontal representa ese intervalo de reposo."
+  },
+  {
+    "file": "reaction-energy.typ",
+    "caption": "Perfil energético esquemático. La distancia horizontal representa el avance de la reacción y carece de escala temporal.",
+    "alt": "Perfil ascendente hasta un pico y descendente hacia el estado final. Las tres energías se indican en el texto.",
+    "description": "Energía relativa en kJ/mol: inicio, 40; pico, 80; final, 20.",
+    "prompt": "¿Qué energía de activación corresponde a la reacción en sentido directo?",
+    "retry": "Para el sentido directo, compara el nivel inicial con el pico.",
+    "feedback": "La energía de activación es 80 − 40 = 40 kJ/mol. El cambio entre los extremos es 20 − 40 = −20 kJ/mol."
+  },
+  {
+    "file": "water.typ",
+    "caption": "Formación de agua en fase gaseosa. Cada grupo de átomos unidos representa una molécula; el dibujo es esquemático.",
+    "alt": "Modelos moleculares antes y después de la reacción. La composición de los grupos se transcribe junto a la pregunta.",
+    "description": "Antes: dos moléculas H–H y una molécula O=O. Después: dos moléculas H–O–H.",
+    "prompt": "¿Cómo comprobarías que el dibujo conserva los átomos de cada elemento?",
+    "retry": "Cuenta por separado las letras H y O en cada lado.",
+    "feedback": "Hay cuatro H y dos O a cada lado. Cambian los enlaces y el número de moléculas, pero se conservan los átomos. La ecuación es 2 H₂(g) + O₂(g) → 2 H₂O(g)."
+  },
+  {
+    "file": "forces.typ",
+    "caption": "Todas las fuerzas externas que actúan sobre el cuerpo suspendido.",
+    "alt": "Dos flechas verticales de igual longitud parten del cuerpo, una hacia arriba y otra hacia abajo.",
+    "description": "Tensión: 8 N hacia arriba. Peso: 8 N hacia abajo.",
+    "prompt": "¿Qué aceleración tiene el cuerpo en ese instante?",
+    "retry": "Asigna un signo a cada fuerza según su dirección antes de sumarlas.",
+    "feedback": "Tomando hacia arriba como positivo, 8 N − 8 N = 0 N. Para una masa positiva, la aceleración es cero. Las fuerzas no determinan por sí solas la velocidad."
+  }
+]
