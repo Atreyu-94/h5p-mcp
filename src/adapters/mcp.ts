@@ -1,7 +1,7 @@
 import {Server,ProtocolError} from '@modelcontextprotocol/server';
 import type {Service} from './service.js';
 import {aliases} from './service.js';
-import {extensionID,skillURI} from './resources.js';
+import {extensionID} from './resources.js';
 import {limit} from '../domain/limits.js';
 import type {Native} from '../domain/types.js';
 const params={'~standard':{version:1 as const,vendor:'h5p',validate(value:unknown){return value&&typeof value==='object'?{value}:{issues:[{message:'Expected object'}]};}}};
@@ -25,18 +25,19 @@ export function mcp(service:Service,shutdown:AbortSignal,pending:Set<Promise<unk
  server.setRequestHandler('resources/read',async request=>{
   try{
    const uri=request.params.uri,result=await service.readResource(uri);
-   const packaged=uri.startsWith('skill://h5p-authoring/')||uri.startsWith('h5p-authoring://v1/')||['h5p-contract://v1/schema','h5p-contract://v1/codes','h5p-contract://v1/storage'].includes(uri);
+   const packaged=uri.startsWith('skill://')||uri.startsWith('h5p-authoring://v1/')||['h5p-contract://v1/schema','h5p-contract://v1/codes','h5p-contract://v1/storage'].includes(uri);
    return packaged ? {...result,ttlMs:300000,cacheScope:'public'} : result;
   }catch{throw new ProtocolError(-32602,'Unknown or unavailable resource');}
  });
  const complete=(payload:Native)=>({resultType:'complete',ttlMs:300000,cacheScope:'public',...payload});
  server.setRequestHandler('skills/list',{params},async(value:Native)=>{
   if(value.cursor!==undefined||Object.keys(value).some(k=>!['cursor','_meta'].includes(k)))throw new ProtocolError(-32602,'Unknown skills cursor or parameter');
-  return complete({skills:[service.resources.skill]});
+  return complete({skills:service.resources.skills});
  });
  server.setRequestHandler('skills/get',{params},async(value:Native)=>{
-  if(value.uri!==skillURI||Object.keys(value).some(k=>!['uri','_meta'].includes(k)))throw new ProtocolError(-32602,'Unknown skill URI or parameter');
-  return complete({skill:service.resources.skill});
+  const skill=service.resources.skills.find(item=>item.uri===value.uri);
+  if(!skill||Object.keys(value).some(k=>!['uri','_meta'].includes(k)))throw new ProtocolError(-32602,'Unknown skill URI or parameter');
+  return complete({skill});
  });
  return server;
 }

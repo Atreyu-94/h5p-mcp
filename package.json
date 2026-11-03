@@ -11,6 +11,8 @@
     "dist/core",
     "h5p_mcp/contracts/*.json",
     ".agents/skills/h5p-authoring",
+    ".agents/skills/typst-graphics",
+    "examples/scientific-figures",
     "LICENSE*",
     "NOTICE*"
   ],

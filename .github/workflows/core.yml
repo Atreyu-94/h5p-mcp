@@ -48,7 +48,7 @@ jobs:
           ./tests/tooling/package-probe.ps1 -Bun (Get-Command bun).Source -Libraries (Join-Path $report.artifacts 'data/libraries')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Verify offline Typst source rendering on a Linux Docker engine
-        if: github.event_name == 'workflow_dispatch' && matrix.os == 'ubuntu-24.04'
+        if: github.event_name == 'workflow_dispatch' && startsWith(matrix.os, 'ubuntu-24.04')
         run: |
           $env:H5P_TEST_TYPST_DOCKER='1'
           $env:H5P_MCP_TYPST_ENABLED='1'
@@ -58,12 +58,34 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun dist/core/cli.js figure setup $env:H5P_MCP_TYPST_PACKAGES
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          docker pull ubuntu@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:H5P_MCP_TYPST_RASTER_DIR=Join-Path $env:RUNNER_TEMP 'raster-profile'
+          bun dist/core/cli.js figure raster-setup $env:H5P_MCP_TYPST_RASTER_DIR
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun test tests/core/typst-sandbox.test.ts
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun test tests/core/compiler.test.ts -t 'portable figure project'
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/tooling/typst-source-probe.mjs (Get-Command bun).Source dist/core/cli.js (Join-Path $env:RUNNER_TEMP 'typst-source-figures')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $report=Get-Content retirement-parity.json -Raw | ConvertFrom-Json
+          $install=Join-Path $env:RUNNER_TEMP 'm6-package'
+          bun tests/tooling/pack.mjs $install
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Push-Location $install
+          try {
+            Set-Content package.json '{"private":true}'
+            bun add --backend=copyfile --ignore-scripts ./h5p-mcp-0.1.0.tgz
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          } finally { Pop-Location }
+          node tests/tooling/typst-benchmark.mjs (Get-Command bun).Source (Join-Path $install 'node_modules/h5p-mcp/dist/core/cli.js') (Join-Path $report.artifacts 'data/libraries') typst-m6
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && github.event_name == 'workflow_dispatch' && startsWith(matrix.os, 'ubuntu-24.04')
+        with:
+          name: typst-m6-${{ matrix.os }}
+          path: typst-m6/
       - name: Exercise optional managed Typst and local MCP on this host
         if: github.event_name == 'workflow_dispatch'
         run: |

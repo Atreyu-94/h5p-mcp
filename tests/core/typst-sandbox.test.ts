@@ -7,6 +7,8 @@ import {Service} from '../../src/adapters/service.js';
 import {originalProfile,profile} from '../../src/infrastructure/typst-profile.js';
 import {checkFigureProject,sandboxImage,renderTypstFigure} from '../../src/infrastructure/typst-sandbox.js';
 
+import {rasterLock,rasterPolicy} from '../../src/infrastructure/typst-raster.js';
+
 const dockerTest=test.skipIf(process.env.H5P_TEST_TYPST_DOCKER!=='1');
 const figures=[
  {file:'parabola',alt:'Graph of y = x squared between -1 and 1'},
@@ -17,6 +19,13 @@ test('editable projects accept either exact package lock and reject mixed or alt
  const manifest={version:1,imageDigest:sandboxImage,fonts:'embedded',ppi:192};
  for(const packages of [originalProfile,profile]){
   expect(checkFigureProject({...manifest,packages})).toEqual(packages);
+ }
+ for(const arch of ['aarch64','x86_64'] as const){
+  const rasterizer=rasterLock(arch);
+  const project={...manifest,packages:profile,renderPolicy:rasterPolicy,rasterizer};
+  expect(checkFigureProject(project)).toEqual(profile);
+  expect(()=>checkFigureProject({...project,rasterizer:{...rasterizer,resvgSha256:'altered'}})).toThrow();
+  expect(()=>checkFigureProject({...project,renderPolicy:undefined})).toThrow();
  }
  const lilaq='preview/lilaq/0.6.0';
  expect(()=>checkFigureProject({...manifest,packages:{...originalProfile,[lilaq]:profile[lilaq]}})).toThrow();
@@ -49,6 +58,22 @@ dockerTest('independent authored drawings compile through local MCP and yield ed
   if(previous===undefined)delete process.env.H5P_MCP_EXPORT_DIR;else process.env.H5P_MCP_EXPORT_DIR=previous;
   await fs.rm(work,{recursive:true,force:true});
  }
+},120000);
+
+dockerTest('rebuilds retain direct and SVG-derived render policies on a configured engine',async()=>{
+ if(!process.env.H5P_MCP_TYPST_RASTER_DIR)return;
+ const work=await fs.mkdtemp(path.join(os.tmpdir(),'typst-rebuild-policies-'));
+ try{
+  const input={source:'A',alt:'A'};
+  for(const policy of [undefined,'offline-single-page-v1',rasterPolicy]){
+   const first=await renderTypstFigure(input,path.join(work,'first-'+String(policy)),undefined,originalProfile,policy);
+   const manifest=first.manifest;
+   expect(manifest.renderPolicy).toBe(policy??'offline-single-page-v1');
+   expect(!!manifest.rasterizer).toBe(policy===rasterPolicy);
+   const rebuilt=await renderTypstFigure(input,path.join(work,'rebuilt-'+String(policy)),undefined,checkFigureProject(manifest),manifest.renderPolicy);
+   expect(rebuilt.manifest.hashes).toEqual(manifest.hashes);
+  }
+ }finally{await fs.rm(work,{recursive:true,force:true});}
 },120000);
 
 dockerTest('isolated sources cannot read outside, fetch a package, exhaust host RAM or publish invalid output',async()=>{

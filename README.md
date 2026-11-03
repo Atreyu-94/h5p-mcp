@@ -98,6 +98,25 @@ a 256 MiB memory limit with no extra swap, one CPU and a 64-process limit.
 Rendering requires an available local engine with these limits. The image is
 never pulled during a request. Source rendering is unavailable over HTTP.
 
+For a single Typst compilation, install the optional raster tools for the architecture
+of the local Linux engine (AMD64 or ARM64). Run setup in an allowed export root:
+
+```sh
+docker pull ubuntu@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+h5p-mcp figure raster-setup /absolute/path/to/new-raster-profile
+```
+
+Set `H5P_MCP_TYPST_RASTER_DIR` to that absolute directory in the stdio server
+environment. Setup downloads resvg 0.49.0 and oxipng 10.2.1 from their GitHub
+releases and verifies both archives and executables. Rendering validates SVG and
+page geometry first. A second isolated container converts that SVG at 192 ppi
+and compresses the PNG losslessly. The manifest records both versions, binary
+hashes, architecture, container image digest and compression level. Existing
+figure projects retain their recorded rendering method when rebuilt. Without
+a configured raster profile, new projects use the original direct Typst PNG.
+Clients can read package guidance and editable examples through
+`skill://typst-graphics/SKILL.md` and its declared resources.
+
 The general tool also returns a text resource at `source.uri` scoped to the same
 owner and expiration as the PNG. Copy the local figure directory for durable
 editing. To capture a figure with an activity, use the asset key from its JSON
