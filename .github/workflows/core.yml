@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022, macos-latest]
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["ubuntu-24.04","ubuntu-24.04-arm","windows-2022","windows-11-arm","macos-15-intel","macos-15"]' || '["ubuntu-24.04","windows-2022","macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -47,6 +47,25 @@ jobs:
           $report=Get-Content retirement-parity.json -Raw | ConvertFrom-Json
           ./tests/tooling/package-probe.ps1 -Bun (Get-Command bun).Source -Libraries (Join-Path $report.artifacts 'data/libraries')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Exercise optional managed Typst and local MCP on this host
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          $report=Get-Content retirement-parity.json -Raw | ConvertFrom-Json
+          $expected = @{
+            'ubuntu-24.04' = 'linux-x64'; 'ubuntu-24.04-arm' = 'linux-arm64'
+            'windows-2022' = 'win32-x64'; 'windows-11-arm' = 'win32-arm64'
+            'macos-15-intel' = 'darwin-x64'; 'macos-15' = 'darwin-arm64'
+          }['${{ matrix.os }}']
+          $actual = bun -p 'process.platform + "-" + process.arch'
+          "commit=$env:GITHUB_SHA runner=${{ matrix.os }} expected=$expected actual=$actual" | Tee-Object -FilePath typst-m1.log
+          if ($LASTEXITCODE -or $actual -ne $expected) { throw "Unexpected Bun architecture: $actual" }
+          node tests/tooling/typst-managed-probe.mjs (Get-Command bun).Source dist/core/cli.js (Join-Path $report.artifacts 'data/libraries') 2>&1 | Tee-Object -FilePath typst-m1.log -Append
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && github.event_name == 'workflow_dispatch'
+        with:
+          name: typst-m1-${{ matrix.os }}
+          path: typst-m1.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

@@ -33,6 +33,7 @@
             "HUB_UNAVAILABLE",
             "TARGET_INCOMPATIBLE",
             "BACKEND_UNAVAILABLE",
+            "RENDERER_UNAVAILABLE",
             "BACKEND_TIMEOUT",
             "INTERNAL_ERROR",
             "LIMIT_EXCEEDED",

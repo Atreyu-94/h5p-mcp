@@ -9,6 +9,34 @@ import {freezeSource,rebuildSource} from './application/source-project.js';
 const [command,...args]=process.argv.slice(2);
 try {
  if(command==='stdio') await stdio();
+ else if(command==='figure') {
+  const {figureStatus,renderForceFigure}=await import('./infrastructure/typst-figure.js');
+  const controller=new AbortController(),abort=()=>controller.abort();
+  process.once('SIGINT',abort);process.once('SIGTERM',abort);
+  try{
+   if(args.length===1 && args[0]==='status')console.log(JSON.stringify(await figureStatus(controller.signal)));
+   else if(args.length===1 && ['install','repair','remove'].includes(args[0])){
+    const {installCompiler,removeCompiler}=await import('./infrastructure/typst-compiler.js');
+    console.log(JSON.stringify(args[0]==='remove'?await removeCompiler(controller.signal):await installCompiler(controller.signal,args[0]==='repair')));
+   }
+   else if((args.length===2 && args[0]==='setup')||(args.length===3 && args[0]==='force')){
+    const service=new Service();
+    try{
+     await service.initialize();
+     const output=await service.authorize(path.resolve(args.at(-1)!),'EXPORT');
+     if(args[0]==='setup'){
+      const {setupFigureProfile}=await import('./infrastructure/typst-profile.js');
+      console.log(JSON.stringify(await setupFigureProfile(output,controller.signal)));
+     }else{
+      const input=await service.authorize(path.resolve(args[1]),'ASSET');
+      console.log(JSON.stringify(await renderForceFigure(input,output,controller.signal)));
+     }
+    }finally{await service.close();}
+   }
+   else throw new Error('Use figure status, figure install|repair|remove, figure setup <new-package-root> or figure force <spec.json> <new-directory>');
+  }catch(error){console.error(JSON.stringify({ok:false,error:error instanceof Error?error.message:String(error)}));process.exitCode=1;}
+  finally{process.off('SIGINT',abort);process.off('SIGTERM',abort);}
+ }
  else if(command==='http') {
   const {config}=await import('./http/auth.js'),{http}=await import('./http/server.js');
   const settings=config(JSON.parse((await readBounded(args[0],65536)).toString('utf8'))),app=http(settings);
@@ -17,7 +45,7 @@ try {
   let closing=false;const close=async()=>{if(closing)return;closing=true;await app.close();await listener.stop(true);};
   process.once('SIGINT',()=>{void close();});process.once('SIGTERM',()=>{void close();});
  }
- else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json|yaml> | build <source.json|yaml> <output-name> | freeze <source.json|yaml> <new-directory> | rebuild <project-directory> <output-name> | admin <refresh|install|package> [name|path]');
+ else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json|yaml> | build <source.json|yaml> <output-name> | freeze <source.json|yaml> <new-directory> | rebuild <project-directory> <output-name> | figure status | figure install|repair|remove | figure setup <new-package-root> | figure force <spec.json> <new-directory> | admin <refresh|install|package> [name|path]');
  else {
   const service=new Service();await service.initialize();
   try {

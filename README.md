@@ -20,6 +20,57 @@ with uploaded asset IDs. Old preparations require explicit re-preparation;
 existing stored artifacts remain readable. See [data transition](docs/architecture/013-native-transition.md)
 and [native backend contract](docs/architecture/011-native-content.md).
 
+## Optional local scientific figures (pilot)
+
+The local CLI and stdio MCP can render a vertical equilibrium diagram with two
+equal, opposite forces. On a new host, enable the feature, install the pinned
+Typst compiler and prepare the CeTZ 0.5.3 / oxifmt 1.0.0 package profile:
+
+```powershell
+$env:H5P_MCP_TYPST_ENABLED = '1'
+$env:H5P_MCP_TYPST_PROVIDER = 'managed'
+$env:H5P_MCP_TYPST_PACKAGES = Join-Path (Get-Location) 'figure-packages'
+h5p-mcp figure install
+h5p-mcp figure setup $env:H5P_MCP_TYPST_PACKAGES
+h5p-mcp figure status
+```
+
+For an existing Typst 0.15.1 on PATH, choose the `system` provider and skip
+`figure install`. An explicit absolute `H5P_MCP_TYPST_BIN` takes precedence
+over either provider. Setup requires a new package directory; you can also
+select an existing verified profile containing the same pinned package trees.
+
+The installer supports x64 and ARM64 on Windows, macOS and Linux (musl binaries).
+It uses the system tar utility to read three named archive members. It checks the
+release and executable digests, retains LICENSE and NOTICE, and activates the
+binary only after a smoke compile. A repeated install reuses a valid copy.
+Use `figure repair` to stage a fresh copy and `figure remove` to remove managed
+compiler builds. Previous builds are retained until removal, so a failed update
+does not discard the previous selection. Removal leaves package profiles and
+editable figures intact. The installer never modifies PATH.
+
+Save this example as `force.json` and run `h5p-mcp figure force force.json my-figure`
+to create a new editable directory:
+
+```json
+{"forceN":8,"upLabel":"Tension","downLabel":"Weight","alt":"Two vertical arrows of equal length start at the body. Tension is 8 N upward and weight is 8 N downward."}
+```
+
+The result contains editable Typst and JSON, an SVG master, a PNG at 192 ppi,
+and a manifest with hashes, dimensions and alternative text. Use `figure.png`
+as an image asset in the existing H5P build flow. Re-run the command with the
+saved JSON to regenerate the diagram.
+
+The local stdio MCP exposes `render_force_figure` when its host starts with
+`H5P_MCP_TYPST_ENABLED=1`. Send the same four fields as the CLI example. The
+result includes the local editable directory, a PNG preview readable with
+`resources/read`, and an `asset_id` usable in the asset map for
+`prepare_stored_h5p_activity` or `prepare_stored_h5p_source`. The stored PNG
+expires after one day; the editable export directory persists. Set the same
+compiler provider and package root in the MCP process environment.
+Installation is a host CLI operation. HTTP clients cannot invoke the renderer.
+H5P playback consumes the embedded PNG without Typst.
+
 ## Workflow
 
 HTTP is opt-in: `h5p-mcp http <host-config.json>`. It requires configured OIDC

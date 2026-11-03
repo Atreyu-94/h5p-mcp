@@ -15,6 +15,7 @@
     "BACKEND_ERROR": "BACKEND_UNAVAILABLE"
   },
   "codes": {
+    "RENDERER_UNAVAILABLE": [false, "The optional figure renderer is unavailable.", "Run h5p-mcp figure status on the host and configure the compiler and package profile."],
     "PERMISSION_DENIED": [
       false,
       "The operation is not authorized by the host.",

@@ -1,6 +1,90 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "force_figure_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "forceN": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
+        },
+        "upLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "downLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "alt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "forceN",
+        "upLabel",
+        "downLabel",
+        "alt"
+      ]
+    },
+    "force_figure_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32767
+        },
+        "manifest": {
+          "type": "object"
+        },
+        "asset_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "preview": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mime_type": {
+              "const": "image/png"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "uri",
+            "mime_type",
+            "sha256"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "directory",
+        "manifest",
+        "asset_id",
+        "preview"
+      ]
+    },
     "error_report": {
       "allOf": [
         {
@@ -898,6 +982,7 @@
       "authoring_report"
     ]
   },
+  "optionalFigures": {"render_force_figure": ["force_figure_input", "force_figure_output"]},
   "remote": {
     "execution_supported": true,
     "requires": [

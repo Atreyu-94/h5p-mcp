@@ -1,4 +1,5 @@
 export const descriptions:Record<string,string>={
+ render_force_figure:'Render a local two-force equilibrium diagram from forceN (newtons), upLabel, downLabel and alternative text. Returns a PNG preview, reusable stored asset ID and editable local bundle. Requires host-enabled Typst.',
  compile_h5p_source:'Compile one versioned JSON source to a prepared native activity using pinned adapters and libraries. Returns source diagnostics, stable identities and a source map; no Lumi or installation.',
  check_h5p_source:'Check a versioned JSON source and its installed dependencies without writing a package. Uses the same independent compiler as build.',
  build_h5p_source:'Compile a versioned JSON source and export content/verified media without Lumi. Destination must already have exact libraries; never overwrites a package.',
