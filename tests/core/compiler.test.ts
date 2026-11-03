@@ -23,7 +23,7 @@ test('compiler pins adapters, preserves educational settings, translations, form
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-compiler-'));try{
   await compilerFixture(root);const libraries=path.join(root,'libraries');
   const source=trueFalse(),before=JSON.stringify(source),first=await compileSource(source,libraries),again=await compileSource(source,libraries);
-  expect(first.diagnostics).toEqual([]);expect(first.activity.params.l10n.trueText).toBe('Verdadero');expect(first.activity.params.question).toBe('<p>\\(1+1=2\\)</p>');expect(first.mathematics.detected).toBe(true);expect(first.activity.params.behaviour.feedbackOnCorrect).toBe('<p>Correct</p>');expect(first.activity.params.behaviour.feedbackOnWrong).toBe('<p>Try again</p>');expect(first.activity).toEqual(again.activity);expect(JSON.stringify(source)).toBe(before);
+  expect(first.diagnostics).toEqual([]);expect(first.activity.params.l10n.trueText).toBe('Verdadero');expect(first.activity.params.question).toBe('<p>\\(1+1=2\\)</p>');expect(first.mathematics.detected).toBe(true);expect(first.activity.params.behaviour.feedbackOnCorrect).toBe('Correct');expect(first.activity.params.behaviour.feedbackOnWrong).toBe('Try again');expect(first.activity).toEqual(again.activity);expect(JSON.stringify(source)).toBe(before);
   const multiple=multiChoice(),result=await compileSource(multiple,libraries);expect(result.diagnostics).toEqual([]);expect(result.activity.params.answers.map((a:Native)=>a.correct)).toEqual([true,false,true]);expect(result.activity.params.behaviour).toMatchObject({type:'multi',singlePoint:false,randomAnswers:false,passPercentage:100});expect(result.activity.params.answers[0].tipsAndFeedback.chosenFeedback).toBe('<p>Length</p>');expect(result.activity.params.overallFeedback[1].feedback).toBe('<p>All correct</p>');expect(result.source_map['/params/answers/0/text']).toBe('/choices/0/text');
   const reordered=await compileSource({...multiple,choices:[...multiple.choices].reverse()},libraries);expect(reordered.identities).toEqual(result.identities);expect(reordered.activity.params.answers[2].text).toBe(result.activity.params.answers[0].text);
   const file=path.join(root,'image.png');await fs.writeFile(file,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ioAAAAASUVORK5CYII=','base64'));
@@ -64,6 +64,10 @@ test('math authoring identifies the exact source field, including nested Blanks 
  } finally {await fs.rm(root,{recursive:true,force:true});}
 },120000);
 
+test('Markdown accepts long blank-line runs and still rejects indented list markers',()=>{
+ expect(renderText({format:'markdown',value:'\n'.repeat(16000)+'x'})).toBe('<p></p><p>x</p>');
+ expect(()=>renderText({format:'markdown',value:'Previous\n\n  1. item'})).toThrow();
+});
 test('bounded text grammar escapes plain HTML and preserves TeX without interpreting its operators',()=>{
  expect(renderText({format:'plain',value:'<script>x</script> & y'})).toBe('<p>&lt;script&gt;x&lt;/script&gt; &amp; y</p>');
  expect(renderText({format:'markdown',value:'**Bold** and *em* \\(x_1 < x_2\\)'})).toBe('<p><strong>Bold</strong> and <em>em</em> \\(x_1 &lt; x_2\\)</p>');

@@ -9,6 +9,11 @@ export function inspectText(entry:Native,value:string):string {
  for(const [tag,related] of [['strong','b'],['em','i'],['ul','li'],['ol','li'],['table','tbody'],['table','tr'],['table','td'],['table','th']])if(allowedTags.includes(tag)&&!allowedTags.includes(related))allowedTags.push(related);
  return sanitize(value,{allowedTags,allowedAttributes:{a:['href','title','rel'],td:['colspan','rowspan'],th:['colspan','rowspan','scope'],ol:['start']},allowedSchemes:['http','https','mailto'],allowProtocolRelative:false});
 }
+// These pinned players display the field as text even when authoring supplied HTML.
+export function playbackText(value:string):string {
+ return sanitize(value.replace(/<br\s*(?:\/\s*)?>|<\/p>\s*(?=<p[ >])|<\/li>\s*(?=<li[ >])/gi,'\n'),
+   {allowedTags:[],allowedAttributes:{}});
+}
 export function metadataErrors(activity:Activity):Array<{field:string;message:string}> {
  const result:Array<{field:string;message:string}>=[];
  if(typeof activity.title!=='string'||!/^.{1,255}$/.test(activity.title))result.push({field:'title',message:'Expected a title of 1–255 characters without line breaks'});

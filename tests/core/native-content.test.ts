@@ -32,6 +32,43 @@ test('native HTML and metadata policy blocks changes without rewriting answers o
  for(const changes of [{title:''},{language:'es-419'},{license:'invented'}])expect((await prepareActivity(context,{...activity,...changes})).ok).toBe(false);
 });
 
+test('pinned native players enforce blank counts, supply Timeline assets and identify text-only fields',async()=>{
+ const entries:Record<string,Native[]>={
+  'H5P.AdvancedBlanks':[
+   {name:'content',type:'group',fields:[{name:'blanksText',type:'text'},{name:'blanksList',type:'list',field:{type:'text'}}]},
+   {name:'overallFeedback',type:'group',fields:[{name:'range',type:'list',optional:true,min:1,field:{type:'group',fields:[
+    {name:'from',type:'number'},{name:'to',type:'number'},{name:'feedback',type:'text'}
+   ]}}]}
+  ],
+  'H5P.Timeline':[{name:'date',type:'list',field:{type:'group',fields:[{name:'headline',type:'text'},{name:'asset',type:'group',optional:true,fields:[{name:'thumbnail',type:'image',optional:true},{name:'caption',type:'text',optional:true}]}]}}],
+  'H5P.OpenEndedQuestion':[{name:'question',type:'text'}]
+ };
+ const libraries={getLibrary:async()=>({runnable:1}),getSemantics:async(v:{machineName:string})=>entries[v.machineName]};
+ const prepare=(library:string,params:Native)=>prepareActivity({libraries,coreApiVersion:{major:1,minor:28}},{library,params,title:'Test',language:'en',license:'U'});
+ for(const [text,ok] of [[':1 :2',false],['___',false],['___ and ______',true]] as const){
+  const blanks=await prepare('H5P.AdvancedBlanks 1.2',{content:{blanksText:text,blanksList:['one','two']}});
+  expect(blanks.ok).toBe(ok);
+  expect(blanks.activity.params.overallFeedback).toEqual([{from:0,to:100,feedback:''}]);
+ }
+ const timeline=await prepare('H5P.Timeline 1.1',{date:[{headline:'First'},{headline:'Next',asset:{caption:'Kept'}}]});
+ expect(timeline.ok).toBe(true);
+ expect(timeline.activity.params.date.map((event:Native)=>event.asset)).toEqual([{}, {caption:'Kept'}]);
+ const prompt=await prepare('H5P.OpenEndedQuestion 1.0',{question:'<p>First</p><p>Second</p>'});
+ expect(prompt.ok).toBe(false);
+ expect(prompt.transformations[0]).toMatchObject({pointer:'/params/question',after:'First\nSecond'});
+ expect((await prepare('H5P.TwitterUserFeed 1.0',{})).diagnostics[0].code).toBe('TARGET_INCOMPATIBLE');
+});
+
+test('oversized native feedback fails the length check before transformation',async()=>{
+ const libraries={getLibrary:async()=>({runnable:1}),getSemantics:async()=>[{name:'feedbackOnWrong',type:'text',maxLength:2048}]};
+ const report=await prepareActivity({libraries,coreApiVersion:{major:1,minor:28}},
+  {library:'H5P.TrueFalse 1.8',params:{feedbackOnWrong:'<br'+' '.repeat(64000)+'x'},title:'Test',language:'en',license:'U'});
+ expect(report.ok).toBe(false);
+ expect(report.errors).toHaveLength(1);
+ expect(report.errors[0]).toContain('maximum length 2048');
+ expect(report.transformations).toEqual([]);
+});
+
 test('math uses rendered text boundaries, skips code and currency, and checks the addon once',async()=>{
  let lookups=0,installed=true;
  const context={coreApiVersion:{major:1,minor:28},libraries:{

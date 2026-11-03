@@ -6,6 +6,7 @@ import {FileLibraryRepository} from '../h5p/libraries.js';
 import {libraryVersion} from '../h5p/dependencies.js';
 import {prepareNative} from '../h5p/native-content.js';
 import {scanNotation,warningLimit,type MathWarning,type MathMode} from '../domain/notation.js';
+import {playbackText} from '../domain/content-policy.js';
 import {checkTree} from '../domain/limits.js';
 import {semanticHash,stableId,renderText,escapeHtml} from '../domain/authoring-source.js';
 import type {Native} from '../domain/types.js';
@@ -58,7 +59,11 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
  }
  if(source.type==='true_false'){
   params.correct=String(source.correct);sourceMap['/params/correct']='/correct';
-  if(source.feedback){params.behaviour.feedbackOnCorrect=text(source.feedback.correct,'/feedback/correct','/params/behaviour/feedbackOnCorrect');params.behaviour.feedbackOnWrong=text(source.feedback.incorrect,'/feedback/incorrect','/params/behaviour/feedbackOnWrong');}
+  if(source.feedback){
+   for(const [key,field] of [['correct','feedbackOnCorrect'],['incorrect','feedbackOnWrong']]){
+    params.behaviour[field]=playbackText(text(source.feedback[key],'/feedback/'+key,'/params/behaviour/'+field));
+   }
+  }
  }else if(source.type==='multi_choice'){
   params.answers=source.choices.map((choice:Native,i:number)=>{
    const prefix=`/params/answers/${i}`,origin=`/choices/${i}`;sourceMap[prefix]=origin;sourceMap[prefix+'/correct']='/correct_ids';

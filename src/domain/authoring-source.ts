@@ -22,7 +22,7 @@ export function renderText(text:{format:'plain'|'markdown';value:string}) {
  });
  if(math.invalid)throw Object.assign(new Error('Invalid math delimiter'),{mathMode:math.invalid});
  value+=text.value.slice(cursor);
- if(value.includes('\\')||/[<>[\]#]|^\s*(?:[-+*>]|\d+\.)\s|\t/m.test(value))throw new Error('Unsupported Markdown; use plain text or paragraphs/emphasis/code');
+ if(value.includes('\\')||/[<>[\]#]|^[^\S\r\n\u2028\u2029]*(?:[-+*>]|\d+\.)\s|\t/m.test(value))throw new Error('Unsupported Markdown; use plain text or paragraphs/emphasis/code');
  value=escapeHtml(value).replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
  if(/[*`_]/.test(value))throw new Error('Unsupported or unmatched Markdown delimiter');
  return value.split(/\n\s*\n/).map(p=>'<p>'+p.replaceAll('\n','<br />')+'</p>').join('').replace(/\uE000(\d+)\uE000/g,(_all,index)=>tokens[Number(index)]);

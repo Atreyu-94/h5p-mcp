@@ -1,5 +1,5 @@
 import {escapeHtml} from '../domain/authoring-source.js';
-import {inspectText,metadataErrors} from '../domain/content-policy.js';
+import {inspectText,metadataErrors,playbackText} from '../domain/content-policy.js';
 import type {LibraryRepository} from '../h5p/libraries.js';
 import type {Native, Activity, Pointer} from '../domain/types.js';
 // Generic native-semantics checks. This is not a replacement for browser tests
@@ -58,6 +58,10 @@ export async function prepareActivity(context: PreparationContext, activity: Act
   async function schema(library: string, at: Pointer, top = false): Promise<Native> {
     const match = /^([A-Za-z0-9][A-Za-z0-9_.-]*) ([0-9]+)\.([0-9]+)$/.exec(library || '');
     if (!match) { fail(at, 'expected exact library "Name major.minor"'); return; }
+    if (library === 'H5P.TwitterUserFeed 1.0') {
+      fail(at,'Twitter User Feed 1.0 depends on a discontinued API. Choose another content type.','TARGET_INCOMPATIBLE');
+      return;
+    }
     const version = { machineName: match[1], majorVersion: Number(match[2]), minorVersion: Number(match[3]) };
     try {
       if (!schemas.has(library)) {
@@ -86,6 +90,12 @@ export async function prepareActivity(context: PreparationContext, activity: Act
       const item = await field(entry, value[entry.name], [...at,entry.name], depth + 1, library);
       if (item !== undefined) result[entry.name] = item;
     }
+    if (library === 'H5P.AdvancedBlanks 1.2' && at.at(-1) === 'content' &&
+        typeof result.blanksText === 'string' && Array.isArray(result.blanksList)) {
+      const markers = result.blanksText.match(/_{3,}/g) || [];
+      if (!markers.length || markers.length !== result.blanksList.length)
+        fail([...at,'blanksText'],'Use one run of three or more underscores per blanksList answer, in order.');
+    }
     return result;
   }
   const media = createMediaResolver({saveMedia:context.saveMedia, assets, usedAssets, warnings, fail});
@@ -101,6 +111,9 @@ export async function prepareActivity(context: PreparationContext, activity: Act
     }
     if (value === undefined) {
       if (entry.default !== undefined) value = structuredClone(entry.default);
+      else if (library === 'H5P.AdvancedBlanks 1.2' && entry.type === 'list' && at.at(-1) === 'overallFeedback')
+        value = [{from:0,to:100,feedback:''}];
+      else if (library === 'H5P.Timeline 1.1' && entry.name === 'asset' && at.at(-3) === 'date' && entry.type === 'group') value = {};
       else if (entry.optional) return undefined;
       else if (entry.type === 'group') value = {};
       else { fail(at, 'required field missing'); return undefined; }
@@ -143,13 +156,20 @@ export async function prepareActivity(context: PreparationContext, activity: Act
       }
       case 'text':
         if(typeof value==='string') {
+          if(entry.maxLength!=null && value.length>entry.maxLength){
+            fail(at,`maximum ${entry.widget==='html'?'HTML ':''}length ${entry.maxLength}`);
+            break;
+          }
           inspectNotation(value,at,library==='H5P.Blanks 1.14'&&at.at(-2)==='questions'&&at.at(-3)==='params');
-          const proposed=inspectText(entry,value);
+          const displaysText = (library === 'H5P.TrueFalse 1.8' && ['feedbackOnCorrect','feedbackOnWrong'].includes(entry.name)) ||
+            (library === 'H5P.DragText 1.10' && entry.name === 'textField') ||
+            (library === 'H5P.OpenEndedQuestion 1.0' && entry.name === 'question') ||
+            (library === 'H5P.DocumentationTool 1.8' && entry.name === 'taskDescription');
+          const proposed=displaysText ? playbackText(value) : inspectText(entry,value);
           if(proposed!==value) {
             transformations.push({pointer:pointer(at),path:displayPath(at),before:value,after:proposed});
             fail(at,'Text violates the supported HTML policy; review the proposed value and resubmit','CONTENT_TRANSFORMATION_REQUIRED');
           }
-          if(entry.widget==='html'&&entry.maxLength!=null&&value.length>entry.maxLength)fail(at,`maximum HTML length ${entry.maxLength}`);
         }
         for (const message of scalarErrors(entry, value)) fail(at, message);
         break;

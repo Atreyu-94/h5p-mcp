@@ -77,7 +77,10 @@ export async function query(request: Native) {
             unsupported_types:[...unsupported], source:'installed library metadata and semantics; nested dependencies and concrete params not verified'});
         }
         item.structurally_authorable = item.evidence.some((e: Native) => e.structurally_authorable);
-        item.authoring_supported = item.structurally_authorable;
+        const retired = item.machine_name === 'H5P.TwitterUserFeed' && !item.installed_versions.some((v:string)=>!v.startsWith('1.0.')) &&
+          (!item.hub_version || item.hub_version.startsWith('1.0.'));
+        item.authoring_supported = !retired && item.structurally_authorable;
+        if (retired) item.summary = 'Twitter User Feed 1.0 depends on a discontinued API. Choose another content type.';
       }
       return { core: editor.config.h5pVersion, last_updated: await editor.contentTypeCache.getLastUpdate() || null,
         total: all.length, offset: request.offset, activities: page,
@@ -103,7 +106,7 @@ export async function query(request: Native) {
     const metadata = await manager.getLibrary(version);
     return { core: editor.config.h5pVersion, library: `${name} ${version.majorVersion}.${version.minorVersion}`,
       patch_version: metadata.patchVersion, metadata, semantics: await manager.getSemantics(version),
-      authoring_supported: Number(metadata.runnable) === 1 && compatible(metadata.coreApi?.majorVersion, metadata.coreApi?.minorVersion) !== false,
+      authoring_supported: !(name === 'H5P.TwitterUserFeed' && version.majorVersion === 1 && version.minorVersion === 0) && Number(metadata.runnable) === 1 && compatible(metadata.coreApi?.majorVersion, metadata.coreApi?.minorVersion) !== false,
       note: 'Native H5P semantics, not JSON Schema. Nested library options refer to separate schemas; query those exact versions. Use the exact library and native params with create_h5p_activity.' };
 
 }
