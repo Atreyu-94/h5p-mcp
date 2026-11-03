@@ -1,6 +1,5 @@
 import {createHash} from 'node:crypto';
 import {checkTree,limit} from '../domain/limits.js';
-import {compileRegexp} from '../domain/semantics.js';
 import type {Native} from '../domain/types.js';
 export class SemanticsCache {
  private entries=new Map<string,{fields:Native[];bytes:number}>();
@@ -14,13 +13,7 @@ export class SemanticsCache {
   const hit=this.entries.get(key);
   if(hit) {this.entries.delete(key);this.entries.set(key,hit);return hit.fields;}
   const compiled=structuredClone(fields);
-  const stack=[...compiled];
-  while(stack.length) {
-   const field=stack.pop();
-   if(field.type==='text' && field.regexp) compileRegexp(field);
-   if(field.fields) stack.push(...field.fields);
-   if(field.field) stack.push(field.field);
-  }
+  // Discovery reads every schema. Compile a text rule only when validating that field.
   const freeze=(value: Native):void=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}};
   freeze(compiled);
   if(bytes>this.totalBytes) throw new Error('Schema cache byte budget exceeded');

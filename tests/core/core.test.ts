@@ -28,6 +28,17 @@ test('portable pure rules preserve exact decimals, pointers and tree budgets',()
  expect(()=>checkTree([1,2])).toThrow();
  configureLimits({});
 });
+test('package text patterns cannot backtrack and retain search, flags and sticky matching',()=>{
+ const check=(pattern:string,value:string,modifiers='')=>scalarErrors({type:'text',regexp:{pattern,modifiers}},value);
+ expect(check('^(a+)+$','a'.repeat(64000)+'!')).toEqual(['text does not match regexp']);
+ expect(check('^(a+)+$','aaa')).toEqual([]);
+ expect(check('abc','xABC','ig')).toEqual([]);
+ expect(check('abc','xabc','y')).toHaveLength(1);
+ expect(check('abc','abcX','y')).toEqual([]);
+ expect(check('(a)\\1','aa')).toEqual(['unsupported or invalid schema regexp']);
+ expect(check('(?=a)a','a')).toEqual(['unsupported or invalid schema regexp']);
+ expect(check('a'.repeat(2049),'a')).toEqual(['unsupported or invalid schema regexp']);
+});
 test('schema compilation separates generation, digest and compiler; enforces bounds',()=>{
  const cache=new SemanticsCache(2,1024,2048), fields=[{type:'text',regexp:{pattern:'^x$',modifiers:'g'}}];
  const a=cache.get('one',fields);
