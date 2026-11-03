@@ -35,7 +35,13 @@ function normalize(value) {
  if(value&&typeof value==='object') return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,k==='subContentId'?'<validated UUID>':k==='checked_at'?'<observation time>':normalize(v)]));
  return value;
 }
-const clients=[core(process.execPath),core(bun)];
+// Run the portable backend directly in Node. Bun still exercises the production IPC and worker boundary.
+const {execute}=await import('../../dist/core/application/execute.js');
+const reference={
+ async request(request) {return {ok:true,result:JSON.parse(JSON.stringify(await execute({data_dir:data,...request})))};},
+ async close() {},
+};
+const clients=[reference,core(bun)];
 let comparisons=0;const packages=[];
 async function compare(request) {
  const values=await Promise.all(clients.map(client=>client.request(request)));

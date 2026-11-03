@@ -10,6 +10,37 @@ import {preflight} from '../../src/infrastructure/archive.js';
 import {prepareActivity} from '../../src/application/authoring.js';
 import type {Native} from '../../src/domain/types.js';
 const load=createRequire(import.meta.url);
+test('native field binding rejects wrong media families and retains generic attachments',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-media-family-'));
+ try {
+  const filename=path.join(root,'attachment.pdf');
+  await fs.writeFile(filename,'%PDF-1.4\n%%EOF');
+  for(const type of ['image','video','audio','file']){
+   const media={path:'asset:pdf',mime:'application/pdf'};
+   const list=type==='video'||type==='audio';
+   const libraries={getLibrary:async()=>({runnable:1}),getSemantics:async()=>[{name:'input',type}]};
+   const result=await prepareActivity({libraries,coreApiVersion:{major:1,minor:28}},
+    {title:'Attachment',language:'en',license:'U',library:'H5P.Test 1.0',params:{input:list?[media]:media},assets:{pdf:filename}});
+   expect(result.ok).toBe(type==='file');
+   if(!result.ok)expect(result.diagnostics).toContainEqual(expect.objectContaining({code:'MIME_MISMATCH',pointer:list?'/params/input/0':'/params/input'}));
+  }
+  const libraries={getLibrary:async()=>({runnable:1}),getSemantics:async()=>[{name:'picture',type:'image'}]};
+  for(const [ref,mime] of [['asset:pdf','image/png'],['asset:pdf','image/svg+xml'],['asset:pdf','text/html'],['https://example.org/a.pdf','application/pdf']]){
+   const result=await prepareActivity({libraries,coreApiVersion:{major:1,minor:28}},
+    {title:'Image',language:'en',license:'U',library:'H5P.Test 1.0',params:{picture:{path:ref,mime}},assets:ref.startsWith('asset:')?{pdf:filename}:{}});
+   expect(result.diagnostics).toContainEqual(expect.objectContaining({code:'MIME_MISMATCH',pointer:'/params/picture'}));
+  }
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+});
+test('DragText 1.10 refuses distractors the player would silently drop',async()=>{
+ const libraries={getLibrary:async()=>({runnable:1}),getSemantics:async()=>[{name:'distractors',type:'text',optional:true}]};
+ for(const [value,valid] of [['one\ntwo',false],['*one* two',false],['*one* *two words*',true],['',true]] as const){
+  const report=await prepareActivity({libraries,coreApiVersion:{major:1,minor:28}},
+   {title:'Terms',language:'en',license:'U',library:'H5P.DragText 1.10',params:{distractors:value}});
+  expect(report.ok).toBe(valid);
+  if(!valid)expect(report.diagnostics[0].pointer).toBe('/params/distractors');
+ }
+});
 async function fixture(root:string) {
  const filename=new URL('../fixtures/libraries.zip',import.meta.url),lock=JSON.parse(await fs.readFile(new URL('../fixtures/libraries.lock.json',import.meta.url),'utf8'));
  expect(createHash('sha256').update(await fs.readFile(filename)).digest('hex')).toBe(lock.sha256);

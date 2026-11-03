@@ -1,3 +1,4 @@
+import {uploadExtension} from '../domain/media-formats.js';
 import {feedback} from '../adapters/feedback.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -77,8 +78,7 @@ export class Vault {
    await fs.mkdir(path.join(stage,'assets'));
    for(const [name,id] of Object.entries(input.assets||{}) as Array<[string,string]>) {
     const asset=await this.objects.get(id,'asset');
-    const extensions:Record<string,string>={'image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp','image/bmp':'bmp','image/tiff':'tiff','image/avif':'avif','audio/mpeg':'mp3','audio/wav':'wav','audio/ogg':'ogg','audio/mp4':'m4a','audio/webm':'webm','video/mp4':'mp4','video/webm':'webm','video/ogg':'ogv','application/pdf':'pdf','text/vtt':'vtt'};
-    const extension=extensions[asset.metadata.mime];if(!extension)throw storageError('MIME_MISMATCH');
+    const extension=uploadExtension(asset.metadata.mime);if(!extension)throw storageError('MIME_MISMATCH');
     const file='asset-'+index++ +'.'+extension;
     const bytes=await this.objects.read(id,'asset');
     assets[name]=path.join(stage,'assets',file);finalAssets[name]=path.join(final,'assets',file);

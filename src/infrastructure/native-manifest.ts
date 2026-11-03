@@ -42,6 +42,8 @@ export async function nativeManifest(root: string, activity: Activity, mathemati
   const load=createRequire(import.meta.url);
   for(const name of ['sanitize-html','magic-bytes.js','yazl','yauzl-promise','@node-rs/crc32','probe-image-size','ajv','yaml'])
     backend['package/'+name]=hash(await fs.readFile(load.resolve(name+'/package.json')));
+  // re2js exports its entry point, but not its package.json subpath.
+  backend['package/re2js']=hash(await fs.readFile(path.resolve(path.dirname(load.resolve('re2js')),'../package.json')));
   // Ported rules have their own provenance; legacy manifests cannot hide a core change.
   const coreRoot=fileURLToPath(new URL('../',import.meta.url));
   async function coreFiles(dir:string):Promise<void> {

@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {createHash} from 'node:crypto';
+import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
 import {Client} from '@modelcontextprotocol/client';
 import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
@@ -46,6 +47,10 @@ for(const modern of [false,true]) {
     const example=JSON.parse((await client.readResource({uri:'skill://h5p-authoring/examples/'+type+'.json'})).contents[0].text);
     const prepared=await client.callTool({name:'prepare_h5p_activity',arguments:example});
     assert.equal(prepared.structuredContent.ok,true,JSON.stringify(prepared));
+    const installedRequire=createRequire(entry);
+    const manifestFile=path.resolve(path.dirname(installedRequire.resolve('re2js')),'../package.json');
+    const manifestDigest=createHash('sha256').update(await fs.readFile(manifestFile)).digest('hex');
+    assert.equal(prepared.structuredContent.activity.preparation.backend['package/re2js'],manifestDigest);
     const exported=await client.callTool({name:'export_h5p_activity',arguments:{activity:prepared.structuredContent.activity,output_name:type}});
     assert.equal(exported.structuredContent.ok,true,JSON.stringify(exported));
     const artifact=exported.structuredContent.artifact;

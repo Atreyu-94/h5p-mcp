@@ -115,6 +115,8 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   const result=await compileSource(source,libraries);
   expect(result.diagnostics).toEqual([]);expect(result.ok).toBe(true);
   expect(result.activity.params.questions[0].subContentId).toBe(stableId('demo','q1'));
+  const spanish=await compileSource({...source,ui:{language:'es',missing:'fallback'}},libraries);
+  expect(spanish.activity.params.introPage).toMatchObject({showIntroPage:false,startButtonText:'Iniciar prueba'});
   expect(result.activity.params.questions[1].params.behaviour.singlePoint).toBe(false);
   expect(result.activity.params.endGame.overallFeedback).toEqual([{from:0,to:59,feedback:'Review'},{from:60,to:100,feedback:'Passed'}]);
   expect(result.source_map['/params/questions/1/params/answers/0/text']).toBe('/questions/1/choices/0/text');

@@ -128,6 +128,42 @@ async function checkEquationCase(name, page, frame) {
       await page.waitForFunction(() => window.H5P?.instances?.length > 0);
       const frame = page.frames().find(f => f !== page.mainFrame()) || page.mainFrame();
       await frame.locator('.h5p-content').waitFor({ state: 'visible' });
+      if (process.env.H5P_DRAGTEXT_CASES) {
+        // The independent fixture maps each two-digit activity ID to its intended targets and distractors.
+        const cases=JSON.parse(await fs.readFile(process.env.H5P_DRAGTEXT_CASES,'utf8'));
+        const {targets,distractors}=cases[name.slice(0,2)];
+        const assert=require('node:assert/strict');
+        await page.setViewportSize({width:360,height:800});
+        const terms=frame.locator('.h5p-draggable');
+        const displayed=await terms.evaluateAll(elements=>elements.map(element=>{
+          const copy=element.cloneNode(true);
+          copy.querySelectorAll('.h5p-hidden-read').forEach(label=>label.remove());
+          return copy.textContent.trim();
+        }));
+        assert.deepEqual(displayed.map(s=>s.trim()).sort(),[...targets,...distractors].sort(),name);
+        const drop=async(term,index)=>{
+          await terms.filter({hasText:term}).first().press('Space');
+          await frame.locator('.h5p-dropzone').nth(index).press('Space');
+        };
+        const check=()=>frame.locator('button.h5p-question-check-answer:visible, button.h5p-theme-check:visible').first().click();
+        const score=()=>frame.evaluate(()=>H5P.instances[0].getScore());
+        await drop(distractors[0],0);
+        await check();
+        assert.equal(await score(),0);
+        await frame.locator('button.h5p-question-try-again:visible, button.h5p-theme-retry:visible').first().click();
+        for (const [index,term] of targets.entries()) {
+          await drop(term,index);
+          const zone=frame.locator('.h5p-dropzone').nth(index);
+          assert((await zone.innerText()).includes(term));
+          assert((await zone.ariaSnapshot()).includes(term));
+        }
+        await check();
+        assert.equal(await score(),targets.length);
+        assert.equal(errors.length,0,errors.join('; '));
+        console.log(JSON.stringify({name,displayed,incorrect:0,correct:targets.length}));
+        await page.close();
+        continue;
+      }
       const mediaCount=await frame.evaluate(async()=>{
           // H5P.Audio's minimal player keeps its audio element outside the DOM.
           const elements=new Set([...document.querySelectorAll('audio,video'),

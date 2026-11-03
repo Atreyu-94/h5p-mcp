@@ -27,13 +27,21 @@ test('native package validation checks license filenames, all bundled graphs and
  let index=0;
  async function pack(meta:unknown=metadata,extra:Record<string,unknown>={}){
   const zip=new ZipFile(),filename=path.join(root,String(index++)+'.h5p');
-  for(const [key,value] of Object.entries({'h5p.json':meta,'content/content.json':{},'H5P.Test-1.0/library.json':library,'H5P.Test-1.0/semantics.json':[],...extra}))zip.addBuffer(Buffer.from(JSON.stringify(value)),key,{compress:false});
+  for(const [key,value] of Object.entries({'h5p.json':meta,'content/content.json':{},'H5P.Test-1.0/library.json':library,'H5P.Test-1.0/semantics.json':[],...extra}))zip.addBuffer(Buffer.isBuffer(value)?value:Buffer.from(JSON.stringify(value)),key,{compress:false});
   const writing=pipeline(zip.outputStream,createWriteStream(filename));zip.end();await writing;return filename;
  }
  try{
   const safe=await pack(metadata,{'H5P.Test-1.0/LICENSE':'License','H5P.Test-1.0/LICENSE.txt':'License','H5P.Test-1.0/NOTICE.md':'Notice'});
   expect((await validatePackage(safe)).ok).toBe(true);
   expect((await installPackage(safe,path.join(root,'safe'))).ok).toBe(true);
+  const pdf={'content/media/document.pdf':Buffer.from('%PDF-1.4\n%%EOF'),
+   'content/content.json':{attachment:{path:'media/document.pdf',mime:'application/pdf'}}};
+  for(const type of ['file','image']){
+   const filename=await pack(metadata,{...pdf,'H5P.Test-1.0/semantics.json':[{type,name:'attachment'}]});
+   if(type==='file')expect((await validatePackage(filename)).ok).toBe(true);
+   else await expect(validatePackage(filename)).rejects.toMatchObject({details:expect.arrayContaining([
+    expect.objectContaining({code:'MIME_MISMATCH',pointer:'/params/attachment'})])});
+  }
   const content=await pack(metadata,{'H5P.Test-1.0/library.json':library});
   const zip=new ZipFile(),only=path.join(root,'content-only.h5p');
   zip.addBuffer(Buffer.from(JSON.stringify(metadata)),'h5p.json');zip.addBuffer(Buffer.from('{}'),'content/content.json');

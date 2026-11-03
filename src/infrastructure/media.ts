@@ -1,3 +1,4 @@
+import {nativeExtension,matchesMediaBytes} from '../domain/media-formats.js';
 import type {Native, Pointer} from '../domain/types.js';
 import fs from 'node:fs/promises';
 import {readBounded} from './read-bounded.js';
@@ -19,6 +20,11 @@ export function createMediaResolver({saveMedia, assets, usedAssets, warnings, fa
   let mediaBytes = 0;
   async function media(entry: Native, value: Native, at: Pointer) {
     if (!object(value) || typeof value.path !== 'string') { fail(at, 'expected media object with path'); return value; }
+    if (typeof value.mime === 'string' && value.mime && entry.type !== 'file' && !value.mime.startsWith(entry.type+'/')) {
+      if (value.path.startsWith('asset:')) usedAssets.add(value.path.slice(6));
+      fail(at, `declared MIME ${value.mime} is incompatible with ${entry.type} field`, 'MIME_MISMATCH');
+      return value;
+    }
     if (!value.path.startsWith('asset:')) {
       // Remote media are left for the player, never downloaded implicitly.
       if (/^https?:\/\//i.test(value.path)) {
@@ -47,21 +53,11 @@ export function createMediaResolver({saveMedia, assets, usedAssets, warnings, fa
       if (stat.size > limit('ASSET_BYTES', 67108864) || mediaBytes > limit('MEDIA_BYTES', 268435456)) throw failure('media byte budget exceeded', 'ASSET_TOO_LARGE');
       usedAssets.add(id);
       if (typeof value.mime !== 'string' || !value.mime) throw failure('media mime is required', 'MIME_MISMATCH');
-      const allowed = new Set(['image/png','image/jpeg','image/gif','image/webp','image/bmp','image/tiff','image/avif',
-        'audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/ogg','audio/mp4','audio/webm',
-        'video/mp4','video/webm','video/ogg','application/pdf','text/vtt']);
-      if (!allowed.has(value.mime)) throw failure('unsupported media MIME; active HTML/SVG assets are not accepted', 'MIME_MISMATCH');
+      if (!nativeExtension(value.mime)) throw failure('unsupported media MIME; active HTML/SVG assets are not accepted', 'MIME_MISMATCH');
       const data = await readBounded(real, Math.min(limit('ASSET_BYTES',67108864),limit('MEDIA_BYTES',268435456)-mediaBytes));
       mediaBytes += data.length;
       const detected = filetypeinfo(data).map((type: Native)=>type.mime);
-      const aliases: Record<string,string> = {'audio/mp3':'audio/mpeg','audio/x-wav':'audio/wav','application/ogg':'audio/ogg','audio/vnd.wave':'audio/wav'};
-      const canonical = (mime: string)=>aliases[mime] || mime;
-      const vtt = value.mime === 'text/vtt' && /^(?:\uFEFF)?WEBVTT(?:[ \t]|\r?\n|$)/.test(data.toString('utf8'));
-      // Containers may carry audio or video; they share magic. Codec/playback
-      // validation remains the host's responsibility, not a MIME guarantee.
-      const containers: Record<string,string> = {'audio/mp4':'video/mp4','audio/webm':'video/webm','video/ogg':'audio/ogg'};
-      const comparable = (mime: string)=>containers[canonical(mime)] || canonical(mime);
-      if (!vtt && !detected.some((mime: string)=>comparable(mime) === comparable(value.mime)))
+      if (!matchesMediaBytes(value.mime,detected,data.subarray(0,4096)))
         throw failure(`declared MIME ${value.mime} does not match detected bytes`, 'MIME_MISMATCH');
       if (saveMedia) {
         // Read a copy: upstream sanitizers/scanners must never mutate the source.

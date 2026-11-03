@@ -1,3 +1,4 @@
+import {nativeExtension} from '../domain/media-formats.js';
 import fs from 'node:fs/promises';
 import {createWriteStream} from 'node:fs';
 import path from 'node:path';
@@ -37,8 +38,8 @@ export async function executeNative(request:CoreRequest) {
   const media=new Map<string,string>();let mediaBytes=0;
   const uploaded=await prepareActivity({libraries:new FileLibraryRepository(libraries),coreApiVersion:{major:1,minor:28},saveMedia:async(_entry,file)=>{
    const digest=createHash('sha256').update(file.data).digest('hex');
-   const extensions:Record<string,string>={'image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp','image/bmp':'bmp','image/tiff':'tiff','image/avif':'avif','audio/mpeg':'mp3','audio/mp3':'mp3','audio/wav':'wav','audio/x-wav':'wav','audio/ogg':'ogg','audio/mp4':'m4a','audio/webm':'webm','video/mp4':'mp4','video/webm':'webm','video/ogg':'ogv','application/pdf':'pdf','text/vtt':'vtt'};
-   const name=`media/${digest}.${extensions[file.mimetype]}`;
+
+   const name=`media/${digest}.${nativeExtension(file.mimetype)}`;
    if(file.data.length>limit('ZIP_MEMBER_BYTES',134217728))throw fail('LIMIT_EXCEEDED','Package member byte budget exceeded');
    if(!media.has(name))mediaBytes+=file.data.length;
    if(!media.has(name)){const target=path.join(stage,path.basename(name));await fs.writeFile(target,file.data,{flag:'wx'});media.set(name,target);}

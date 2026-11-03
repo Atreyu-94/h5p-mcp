@@ -161,6 +161,9 @@ export async function prepareActivity(context: PreparationContext, activity: Act
             break;
           }
           inspectNotation(value,at,library==='H5P.Blanks 1.14'&&at.at(-2)==='questions'&&at.at(-3)==='params');
+          if(library==='H5P.DragText 1.10' && entry.name==='distractors' &&
+              value.split(/(\*[^*\r\n]*\*)/).some((part,index)=>index%2 ? !part.slice(1,-1).trim() : !!part.trim()))
+            fail(at,'Wrap each distractor in asterisks, for example *first term* *second term*.');
           const displaysText = (library === 'H5P.TrueFalse 1.8' && ['feedbackOnCorrect','feedbackOnWrong'].includes(entry.name)) ||
             (library === 'H5P.DragText 1.10' && entry.name === 'textField') ||
             (library === 'H5P.OpenEndedQuestion 1.0' && entry.name === 'question') ||

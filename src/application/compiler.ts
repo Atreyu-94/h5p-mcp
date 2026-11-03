@@ -169,7 +169,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   if(missingDefault){if(normalized.ui.missing==='error')error('/ui/language','translation','adapter');else warnings.push('Translation unavailable for some interface fields in '+version+'; using English defaults.');}
  }
  const usedOverrides=new Set<string>();
- const roots=source.type==='true_false'?['l10n','confirmCheck','confirmRetry']:source.type==='multi_choice'?['UI','confirmCheck','confirmRetry']:source.type==='question_set'?['texts','endGame']:source.type==='blanks'?fields!.filter((f:Native)=>f.common).map((f:Native)=>f.name):[];
+ const roots=source.type==='true_false'?['l10n','confirmCheck','confirmRetry']:source.type==='multi_choice'?['UI','confirmCheck','confirmRetry']:source.type==='question_set'?['introPage','texts','endGame']:source.type==='blanks'?fields!.filter((f:Native)=>f.common).map((f:Native)=>f.name):[];
  if(roots.length)await translations(fields!,source.library.name,params,roots,'/params');
  if(source.image){
   const picture:Native={file:{path:'asset:'+source.image.asset,mime:source.image.mime,copyright:{license:source.image.copyright.license,authors:[{name:source.image.copyright.author,role:'Author'}]}},alt:source.image.alt,decorative:false};

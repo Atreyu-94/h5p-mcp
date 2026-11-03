@@ -17,6 +17,15 @@ export async function storageProbe(client,root,reconnect) {
  await fs.writeFile(png,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ioAAAAASUVORK5CYII=','base64'));
  const asset=await call(client,'upload_h5p_asset',{path:png,mime:'image/png'});
  const activity={title:'Persistent math and image',library:'H5P.TrueFalse 1.8',assets:{image:asset.object_id},params:{question:'<p>\\(1+1=2\\)</p>',correct:'true',media:{type:{library:'H5P.Image 1.1',params:{file:{path:'asset:image',mime:'image/png'},alt:'Image'}}}}};
+ const pdf=path.join(root,'attachment.pdf');
+ await fs.writeFile(pdf,'%PDF-1.4\n%%EOF');
+ const document=await call(client,'upload_h5p_asset',{path:pdf,mime:'application/pdf'});
+ const invalid=structuredClone(activity);
+ invalid.assets.image=document.object_id;
+ invalid.params.media.type.params.file.mime='application/pdf';
+ const blocked=(await client.callTool({name:'prepare_stored_h5p_activity',arguments:{activity:invalid}})).structuredContent;
+ assert.equal(blocked.ok,false);
+ assert(blocked.diagnostics.some(d=>d.code==='MIME_MISMATCH'&&d.pointer==='/params/media/type/params/file'),JSON.stringify(blocked));
  const prepared=await call(client,'prepare_stored_h5p_activity',{activity});
  assert(prepared.library_snapshot_id);
  await fs.writeFile(png,'changed after upload');
