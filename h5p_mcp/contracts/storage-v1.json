@@ -409,6 +409,23 @@
       "required": [
         "source"
       ]
+    },
+    "validate_stored_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "object_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "target_profile_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "required": [
+        "object_id"
+      ]
     }
   },
   "local": {
@@ -429,7 +446,7 @@
       "stored_output"
     ],
     "validate_stored_h5p_package": [
-      "stored_id_input",
+      "validate_stored_input",
       "operation_report"
     ],
     "list_stored_h5p_objects": [

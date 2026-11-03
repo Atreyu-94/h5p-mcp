@@ -313,6 +313,30 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "package_mode": {
+          "enum": [
+            "content-only",
+            "with-libraries"
+          ]
+        },
+        "required_libraries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_local_libraries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_target_libraries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -809,6 +833,23 @@
         "output_name"
       ],
       "type": "object"
+    },
+    "validate_path_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_profile_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      }
     }
   },
   "local": {
@@ -837,7 +878,7 @@
       "operation_report"
     ],
     "validate_h5p_package": [
-      "path_input",
+      "validate_path_input",
       "operation_report"
     ],
     "export_h5p_batch": [
@@ -869,7 +910,7 @@
       "get_h5p_type_contract": "library_input",
       "prepare_stored_h5p_activity": "stored_prepare_input",
       "export_prepared_h5p_activity": "stored_export_input",
-      "validate_stored_h5p_package": "stored_id_input",
+      "validate_stored_h5p_package": "validate_stored_input",
       "install_h5p_library_package": "stored_id_input",
       "list_stored_h5p_objects": "stored_list_input",
       "revoke_stored_h5p_object": "stored_id_input",

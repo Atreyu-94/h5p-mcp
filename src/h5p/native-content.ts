@@ -10,7 +10,7 @@ import type {Activity,CoreRequest,Native} from '../domain/types.js';
 import {limit,checkTree} from '../domain/limits.js';
 import {prepareActivity} from '../application/authoring.js';
 import {FileLibraryRepository} from './libraries.js';
-import {resolveLibraries,libraryVersion} from './dependencies.js';
+import {resolveLibraries,libraryVersion,runtimeDependencies} from './dependencies.js';
 import {nativeManifest,sameNativeManifest} from '../infrastructure/native-manifest.js';
 import {readBounded} from '../infrastructure/read-bounded.js';
 const load=createRequire(import.meta.url);
@@ -48,17 +48,7 @@ export async function executeNative(request:CoreRequest) {
   if(!uploaded.ok)throw Object.assign(fail('INVALID_PARAMETER','Media preparation failed'),{details:uploaded.diagnostics});
   const graph=await resolveLibraries(new FileLibraryRepository(libraries),report.activity,report.mathematics.detected);
   for(const node of graph.values()){const core=node.metadata.coreApi;if(core&&(core.majorVersion>1||core.majorVersion===1&&core.minorVersion>28))throw fail('TARGET_INCOMPATIBLE','Dependency requires a newer Core');}
-  const preloaded=new Set<string>(),dynamic=new Set<string>();
-  function runtime(name:string,kind:'preloaded'|'dynamic') {
-   const set=kind==='preloaded'?preloaded:dynamic;if(set.has(name))return;set.add(name);
-   const node=graph.get(name)!;
-   for(const child of node.dependencies.preloaded)runtime(child,kind);
-   for(const child of node.dependencies.dynamic)runtime(child,'dynamic');
-  }
-  runtime(report.activity.library,'preloaded');
-  const stack:Native[]=[report.activity.params];
-  while(stack.length){const value=stack.pop();if(!value||typeof value!=='object')continue;if(typeof value.library==='string'&&value.params)runtime(value.library,'preloaded');stack.push(...Object.values(value));}
-  if(report.mathematics.detected)runtime('H5P.MathDisplay 1.0','preloaded');
+  const {preloaded,dynamic}=runtimeDependencies(graph,report.activity,report.mathematics.detected);
   const main=graph.get(report.activity.library)!,modes=main.metadata.embedTypes??['div'];
   if(!Array.isArray(modes)||!modes.length||modes.some(mode=>!['div','iframe'].includes(mode)))throw fail('INVALID_METADATA','Invalid embedTypes');
   // H5P PHP Core treats an empty optional list as a malformed dependency object.

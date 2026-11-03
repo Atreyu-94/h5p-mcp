@@ -162,3 +162,14 @@ Every acquisition reads the source library tree, cache.json and config.json. The
 By default each store retains up to four generations (`H5P_MCP_MAX_GENERATIONS`) plus space for one generation under construction. Each is subject to the snapshot file/byte limits and the two bounded configuration files. A newly published generation may temporarily occupy the staging allowance while an idle predecessor is reclaimed. An empty cache is initialized with the .owned-by-h5p-mcp-v2 marker. A nonempty v2 directory without that marker is rejected before cleanup. The previous v1 cache is left untouched and may be removed offline after stopping any older servers. An idle victim is renamed to discard before recursive deletion. Each acquisition retries unfinished cleanup under the store lock. Within the configured capacity, verified hits remain available if deleting discard fails. Acquisitions that need a new copy return the cleanup error until that space is reclaimed. As before, an operator must confirm that no writer survives before removing an orphaned .core-lock after an abrupt shutdown.
 
 Permission and disk-full errors stop acquisition. To run without persistent generation storage, set `H5P_MCP_GENERATION_CACHE=temporary` before startup. This uses private, verified temporary copies removed at close. The source lock and temporary space are still required. An existing store needs no migration. For offline cache removal or repair, stop all processes using that store and remove only its derived cache directory. The source libraries and the object store are independent.
+
+
+Native text fields with a declared length limit are rejected before markup normalization.
+H5P semantics patterns are limited to 2048 characters and evaluated with RE2JS. Unsupported
+patterns, including backreferences and lookahead, fail field validation. Patterns use RE2
+character-class semantics (for example, `\s` matches ASCII whitespace). Each search starts
+at index zero, including global searches. A sticky pattern must match at that position.
+
+Full-package validation checks required playback dependencies against the manifest, including
+nested activities and the explicit MathDisplay preload when notation is present. An installed
+library folder alone does not declare a preload.

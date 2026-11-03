@@ -33,7 +33,7 @@ export async function storageProbe(client,root,reconnect) {
  assert.equal(createHash('sha256').update(bytes).digest('hex'),one.sha256);
  const filename=path.join(root,'stored.h5p');await fs.writeFile(filename,bytes);
  const pkg=await call(client,'upload_h5p_package',{path:filename,mime:'application/zip'});
- assert.equal((await call(client,'validate_stored_h5p_package',{object_id:pkg.object_id})).verification.importation,'passed');
+ assert.equal((await call(client,'validate_stored_h5p_package',{object_id:pkg.object_id})).verification.importation,'not_run');
  const target=await call(client,'register_h5p_target_profile',{profile:{core:{major:1,minor:28},inventory_at:new Date().toISOString(),can_install:false,libraries:[]}});
  const incompatible=(await client.callTool({name:'export_prepared_h5p_activity',arguments:{...input,idempotency_key:'target-check',target_profile_id:target.object_id}})).structuredContent;
  assert.equal(incompatible.diagnostics[0].code,'TARGET_INCOMPATIBLE');

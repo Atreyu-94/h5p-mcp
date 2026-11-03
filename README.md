@@ -99,6 +99,10 @@ dimensions and embeds files, preserving source files. Missing and unreferenced
 asset mappings are rejected. Remote HTTP(S) media remain URLs and need network
 access during playback. Core 1.28 may reject SVG/office attachments by default.
 
+For a ready source, call `build_h5p_source` once. It validates the source and produces a content-only package. Use `compile_h5p_source` to inspect native parameters or `check_h5p_source` to diagnose an input.
+
+Package validation reports `package_mode` and `required_libraries`. Full packages are checked against their bundled libraries. Content-only packages use installed local schemas; absent versions are listed in `missing_local_libraries` and semantics remain unverified. Pass an owner-bound `target_profile_id` to either validation tool to list versions absent from that destination inventory in `missing_target_libraries`. This comparison uses major and minor versions. Moodle import, playback and grading require observations at the destination.
+
 ## Mathematical notation
 
 Write LaTeX explicitly as `\( ... \)` (inline), `\[ ... \]` or `$$ ... $$`

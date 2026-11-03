@@ -44,3 +44,19 @@ export async function resolveLibraries(repository:LibraryRepository,activity:Pic
  if(mathematics)await add('H5P.MathDisplay 1.0',0);
  return nodes;
 }
+
+/** Libraries that the player must load, independently of the editor installation closure. */
+export function runtimeDependencies(graph:Map<string,LibraryNode>,activity:Pick<Activity,'library'|'params'>,mathematics:boolean){
+  const preloaded=new Set<string>(),dynamic=new Set<string>();
+  function runtime(name:string,kind:'preloaded'|'dynamic') {
+   const set=kind==='preloaded'?preloaded:dynamic;if(set.has(name))return;set.add(name);
+   const node=graph.get(name)!;
+   for(const child of node.dependencies.preloaded)runtime(child,kind);
+   for(const child of node.dependencies.dynamic)runtime(child,'dynamic');
+  }
+  runtime(activity.library,'preloaded');
+  const stack:Native[]=[activity.params];
+  while(stack.length){const value=stack.pop();if(!value||typeof value!=='object')continue;if(typeof value.library==='string'&&value.params)runtime(value.library,'preloaded');stack.push(...Object.values(value));}
+  if(mathematics)runtime('H5P.MathDisplay 1.0','preloaded');
+  return {preloaded,dynamic};
+}

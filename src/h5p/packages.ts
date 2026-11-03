@@ -6,7 +6,8 @@ import {createHash} from 'node:crypto';
 import {preflight} from '../infrastructure/archive.js';
 import {readBounded} from '../infrastructure/read-bounded.js';
 import {FileLibraryRepository} from './libraries.js';
-import {resolveLibraries,libraryVersion} from './dependencies.js';
+import {resolveLibraries,libraryVersion,runtimeDependencies} from './dependencies.js';
+import {metadataErrors} from '../domain/content-policy.js';
 import {prepareActivity} from '../application/authoring.js';
 import type {Native} from '../domain/types.js';
 const load=createRequire(import.meta.url),fail=(code='SCHEMA_VALIDATION_FAILED')=>Object.assign(new Error(code),{code});
@@ -73,7 +74,7 @@ function validateMetadata(meta:Native){
   if(!Array.isArray(meta[key])||meta[key].some((item:Native)=>!item||fields.some(field=>typeof item[field]!=='string'||!item[field])))throw fail();
  }
 }
-export async function validatePackage(filename:string){return unpack(filename,async root=>{
+export async function validatePackage(filename:string,installedLibraries?:string){return unpack(filename,async root=>{
  const libraries=await inspectLibraries(root),meta=await json(path.join(root,'h5p.json')),params=await json(path.join(root,'content/content.json'));
  validateMetadata(meta);
  const main=meta.preloadedDependencies.find((v:Native)=>v.machineName===meta.mainLibrary);if(!main)throw fail();
@@ -82,10 +83,31 @@ export async function validatePackage(filename:string){return unpack(filename,as
   const relative=value.path;if(relative.includes('\\')||relative.split('/').some((p:string)=>!p||p==='..'||p==='.')||path.isAbsolute(relative))throw fail();const file=path.join(root,'content',relative);await fs.access(file);const id='package'+index++;assets[id]=file;value.path='asset:'+id;
  }pending.push(...Object.values(value));}
  const activity={title:meta.title,language:meta.language,license:meta.license??'U',library:`${main.machineName} ${main.majorVersion}.${main.minorVersion}`,params,assets};
- const repo=new FileLibraryRepository(root);await resolveLibraries(repo,activity);
+ if(!params||typeof params!=='object'||Array.isArray(params)||metadataErrors(activity).length)throw fail();
+ const declared=[...meta.preloadedDependencies,...(meta.dynamicDependencies??[])];
+ const required_libraries=[...new Set<string>(declared.map(v=>v.machineName+' '+v.majorVersion+'.'+v.minorVersion))].sort();
+ const package_mode=libraries.length?'with-libraries':'content-only';
+ const repo=new FileLibraryRepository(libraries.length?root:installedLibraries??root);
+ const missing_local_libraries:string[]=[];
+ if(!libraries.length){
+  for(const name of required_libraries){
+   try{await repo.getLibrary(libraryVersion(name));}
+   catch(error:Native){if(error.code!=='ENOENT')throw error;missing_local_libraries.push(name);}
+  }
+  if(missing_local_libraries.length)return {ok:false,package_mode,required_libraries,missing_local_libraries};
+ }
  for(const item of libraries)await resolveLibraries(repo,{library:item.name,params:{}});
  for(const kind of ['preloadedDependencies','dynamicDependencies'])for(const item of meta[kind]||[])await resolveLibraries(repo,{library:`${item.machineName} ${item.majorVersion}.${item.minorVersion}`,params:{}});
  const previous=process.env.H5P_MCP_ASSET_ROOTS;process.env.H5P_MCP_ASSET_ROOTS=JSON.stringify([path.join(root,'content')]);
- try{const report=await prepareActivity({libraries:repo,coreApiVersion:{major:1,minor:28}},activity);if(!report.ok)throw Object.assign(fail(),{details:report.diagnostics});}finally{if(previous===undefined)delete process.env.H5P_MCP_ASSET_ROOTS;else process.env.H5P_MCP_ASSET_ROOTS=previous;}
- return {ok:true,errors:[],warnings:[],libraries:libraries.length,engine:'native-package-v1'};
+ try{
+  const report=await prepareActivity({libraries:repo,coreApiVersion:{major:1,minor:28}},activity);
+  if(!report.ok)throw Object.assign(fail(),{details:report.diagnostics});
+  const graph=await resolveLibraries(repo,report.activity,report.mathematics.detected);
+  const required=runtimeDependencies(graph,report.activity,report.mathematics.detected);
+  const name=(v:Native)=>v.machineName+' '+v.majorVersion+'.'+v.minorVersion;
+  const preloaded=new Set(meta.preloadedDependencies.map(name)),dynamic=new Set((meta.dynamicDependencies||[]).map(name));
+  for(const lib of required.preloaded)if(!preloaded.has(lib))throw fail();
+  for(const lib of required.dynamic)if(!preloaded.has(lib)&&!dynamic.has(lib))throw fail();
+ }finally{if(previous===undefined)delete process.env.H5P_MCP_ASSET_ROOTS;else process.env.H5P_MCP_ASSET_ROOTS=previous;}
+ return {ok:true,package_mode,required_libraries,missing_local_libraries,errors:[],warnings:[],libraries:libraries.length,engine:'native-package-v1'};
  },true);}

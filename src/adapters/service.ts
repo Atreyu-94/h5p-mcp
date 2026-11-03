@@ -113,6 +113,15 @@ export class Service {
   const filename=(outputName.replace(/[^A-Za-z0-9._-]/g,'_').replace(/^[._-]+|[._-]+$/g,'')||'export').replace(/\.h5p$/i,'')+'.h5p';
   return path.join(directory,filename);
  }
+ private async packageReport(result:Native,targetID?:string){
+  const {ok,package_mode,required_libraries,missing_local_libraries}=result;
+  const checks=report('validation',ok,ok?[]:[{code:'LIBRARY_NOT_INSTALLED'}],{structure:'passed',semantics:ok?'passed':'not_run'});
+  if(!targetID)return {...checks,package_mode,required_libraries,missing_local_libraries};
+  const target=(await (await this.vault()).objects.get(targetID,'target')).metadata;
+  const installed=new Set(target.libraries.map((lib:Native)=>lib.machine_name+' '+lib.major+'.'+lib.minor));
+  return {...checks,package_mode,required_libraries,missing_local_libraries,
+   missing_target_libraries:required_libraries.filter((name:string)=>!installed.has(name))};
+ }
  async dispatch(name:string,args:Native,signal:AbortSignal):Promise<Native> {
   if(!this.allowed(name)) throw failure('PERMISSION_DENIED');
   if(Object.hasOwn(storage.local,name)) {
@@ -129,7 +138,7 @@ export class Service {
    if(name==='revoke_stored_h5p_object'){await vault.objects.revoke(args.object_id);return {revoked:true};}
    if(name==='capture_h5p_library_snapshot')return this.stored(await vault.snapshot(true,signal));
    if(name==='activate_h5p_library_snapshot'){await vault.objects.activate('libraries',args.object_id);return this.stored(await vault.objects.get(args.object_id,'libraries'));}
-   if(name==='validate_stored_h5p_package'){await vault.validate(args.object_id,signal);return report('validation',true,[],{structure:'passed',importation:'passed'});}
+   if(name==='validate_stored_h5p_package'){return this.packageReport(await vault.validate(args.object_id,signal),args.target_profile_id);}
   }
   if(name==='search_h5p_types'||name==='refresh_h5p_catalog') return this.run('discover',{query:'',installed_only:false,offset:0,limit:20,...args,refresh:name==='refresh_h5p_catalog'},signal);
   if(name==='get_h5p_type_contract'||name==='install_h5p_library') {
@@ -161,8 +170,7 @@ export class Service {
   }
   if(name==='validate_h5p_package') {
    const filename=await this.authorize(args.path,'PACKAGE');
-   await this.run('validate',{path:filename},signal);
-   return report('validation',true,[],{structure:'passed',importation:'passed'});
+   return this.packageReport(await this.run('validate',{path:filename},signal),args.target_profile_id);
   }
   if(name==='export_h5p_activity') {
    const destination=await this.destination(args.output_name);
@@ -234,7 +242,7 @@ export class Service {
    const entry=this.resources.artifacts.get(result.artifact.uri)!;
    legacy={output_path:entry.filename,h5p_json:result.artifact.manifest.h5p,content_json:entry.content,verification:result.verification};
   }
-  if(name==='validate_h5p') legacy={ok:true,errors:[],warnings:[],verification:result.verification};
+  if(name==='validate_h5p') legacy={...result,errors:[],warnings:result.warnings??[]};
   return {content:[{type:'text',text:JSON.stringify(legacy)}],structuredContent:legacy,isError:false};
  }
  async close(){await this.engine.close();if(this.vaultPromise)await (await this.vaultPromise).close();}

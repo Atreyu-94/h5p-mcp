@@ -34,6 +34,27 @@ test('native package validation checks license filenames, all bundled graphs and
   const safe=await pack(metadata,{'H5P.Test-1.0/LICENSE':'License','H5P.Test-1.0/LICENSE.txt':'License','H5P.Test-1.0/NOTICE.md':'Notice'});
   expect((await validatePackage(safe)).ok).toBe(true);
   expect((await installPackage(safe,path.join(root,'safe'))).ok).toBe(true);
+  const content=await pack(metadata,{'H5P.Test-1.0/library.json':library});
+  const zip=new ZipFile(),only=path.join(root,'content-only.h5p');
+  zip.addBuffer(Buffer.from(JSON.stringify(metadata)),'h5p.json');zip.addBuffer(Buffer.from('{}'),'content/content.json');
+  const writing=pipeline(zip.outputStream,createWriteStream(only));zip.end();await writing;
+  expect(await validatePackage(only)).toMatchObject({ok:false,package_mode:'content-only',missing_local_libraries:['H5P.Test 1.0']});
+  await installPackage(content,path.join(root,'target'));
+  expect(await validatePackage(only,path.join(root,'target/libraries'))).toMatchObject({ok:true,package_mode:'content-only',required_libraries:['H5P.Test 1.0']});
+  const math={machineName:'H5P.MathDisplay',majorVersion:1,minorVersion:0};
+  const withFormula={'content/content.json':{text:'Use \\(x\\)'},'H5P.Test-1.0/semantics.json':[{type:'text',name:'text'}],
+   'H5P.MathDisplay-1.0/library.json':{...math,title:'MathDisplay',patchVersion:0,runnable:0}};
+  for(const manifest of [metadata,{...metadata,dynamicDependencies:[math]}])
+   await expect(validatePackage(await pack(manifest,withFormula))).rejects.toMatchObject({code:'SCHEMA_VALIDATION_FAILED'});
+  expect((await validatePackage(await pack({...metadata,preloadedDependencies:[dependency,math]},withFormula))).ok).toBe(true);
+  const child={...dependency,machineName:'H5P.Child'};
+  const files={'H5P.Child-1.0/library.json':{...library,...child,runnable:0}};
+  const dynamicChild={...files,'H5P.Test-1.0/library.json':{...library,dynamicDependencies:[child]}};
+  await expect(validatePackage(await pack(metadata,dynamicChild))).rejects.toMatchObject({code:'SCHEMA_VALIDATION_FAILED'});
+  expect((await validatePackage(await pack({...metadata,dynamicDependencies:[child]},dynamicChild))).ok).toBe(true);
+  expect((await validatePackage(await pack({...metadata,preloadedDependencies:[dependency,child]},dynamicChild))).ok).toBe(true);
+  const editorOnly={...files,'H5P.Test-1.0/library.json':{...library,editorDependencies:[child]}};
+  expect((await validatePackage(await pack(metadata,editorOnly))).ok).toBe(true);
   for(const name of ['LICENSE.php','COPYING.phtml','NOTICE.cgi','LICENSE-MIT.php']){
    const file=await pack(metadata,{['H5P.Test-1.0/'+name]:'not executed'});
    await expect(validatePackage(file)).rejects.toMatchObject({code:'SCHEMA_VALIDATION_FAILED'});
