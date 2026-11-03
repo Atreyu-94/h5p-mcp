@@ -71,6 +71,33 @@ compiler provider and package root in the MCP process environment.
 Installation is a host CLI operation. HTTP clients cannot invoke the renderer.
 H5P playback consumes the embedded PNG without Typst.
 
+The local renderer accepts the fixed template's JSON fields. Labels are data.
+Typst runs in a private figure directory with verified packages; package tree
+links are rejected. Each SVG or PNG output is limited to 4 MiB while compiling.
+The runner requires one page and checks the 16-million-pixel budget at 192 ppi
+before rasterizing.
+
+For AI-authored diagrams, enable the local stdio tool `render_typst_figure` with
+`H5P_MCP_TYPST_ENABLED=1`, `H5P_MCP_TYPST_SANDBOX=docker` and the verified
+`H5P_MCP_TYPST_PACKAGES` directory from figure setup. Supply `source` (one
+editable Typst document, up to 64 KiB) and `alt`. Use built-ins or import
+`@preview/cetz:0.5.3`. The bundle contains the original source, SVG master
+and PNG. Only the raster is served as an MCP preview or embedded in H5P.
+
+Prepare a local Linux Docker Engine and explicitly pull the pinned official
+compiler once:
+
+```sh
+docker pull ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f
+```
+
+The runner uses the Docker Desktop Linux pipe on Windows or the local
+`/var/run/docker.sock` socket on Unix. Each compile has two read-only input
+mounts, a read-only root, no external network, no capabilities, a non-root UID,
+a 256 MiB memory limit with no extra swap, one CPU and a 64-process limit.
+Rendering requires an available local engine with these limits. The image is
+never pulled during a request. Source rendering is unavailable over HTTP.
+
 ## Workflow
 
 HTTP is opt-in: `h5p-mcp http <host-config.json>`. It requires configured OIDC

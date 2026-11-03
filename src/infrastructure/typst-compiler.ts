@@ -48,7 +48,7 @@ async function unpackRelease(release:Release,archive:string,dir:string,signal:Ab
  const tar=process.platform==='win32'?path.join(process.env.SystemRoot||'C:\\Windows','System32','tar.exe'):'/usr/bin/tar';
  for(const name of [binaryName(),'LICENSE','NOTICE']){
   // Extract named members to stdout; archive paths never become writable host paths.
-  const stdout=await runFigureProcess(tar,['-xOf',archive,'typst-'+release.target+'/'+name],signal,128*1024*1024,45000);
+  const stdout=await runFigureProcess(tar,['-xOf',archive,'typst-'+release.target+'/'+name],signal,{maxStdout:128*1024*1024,timeoutMs:45000});
   if(name===binaryName()&&sha(stdout)!==release.binary)throw new Error('Unexpected Typst executable digest.');
   await fs.writeFile(path.join(dir,name),stdout,{flag:'wx',mode:name===binaryName()?0o755:0o644});
  }

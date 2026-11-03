@@ -19,21 +19,32 @@ export const profile=Object.fromEntries(Object.entries(packages).map(([name,pin]
 // Check bytes before use and compile from private copies to keep inputs stable.
 export async function verifyProfile(root:string,destination?:string) {
  if(!root || !path.isAbsolute(root))throw new Error('Set H5P_MCP_TYPST_PACKAGES to the absolute package root containing preview/.');
+ const trustedRoot=await fs.realpath(root);
  for(const [pkg,expected] of Object.entries(profile)){
-  const base=path.join(root,pkg);
-  const entries=await fs.readdir(base,{recursive:true,withFileTypes:true});
-  const records:string[]=[];
-  for(const entry of entries){
-   if(!entry.isDirectory()&&!entry.isFile())throw new Error('Unsupported package entry.');
-   if(entry.isDirectory())continue;
-   const filename=path.join(entry.parentPath,entry.name);
-   const name=path.relative(base,filename).split(path.sep).join('/');
-   const data=await readBounded(filename,8*1024*1024);
-   records.push(name+'\0'+sha(data)+'\n');
-   if(destination){
-    const target=path.join(destination,pkg,name);
-    await fs.mkdir(path.dirname(target),{recursive:true});
-    await fs.writeFile(target,data,{flag:'wx'});
+  let base=trustedRoot;
+  for(const part of pkg.split('/')){
+   base=path.join(base,part);
+   if(!(await fs.lstat(base)).isDirectory())throw new Error('Unsupported package directory: '+pkg);
+  }
+  const records:string[]=[],dirs=[''];
+  let members=0,bytes=0;
+  while(dirs.length){
+   const relative=dirs.pop()!;
+   const directory=await fs.opendir(path.join(base,relative));
+   for await(const entry of directory){
+    if(++members>256)throw new Error('Package entry budget exceeded.');
+    const name=relative?relative+'/'+entry.name:entry.name;
+    if(entry.isDirectory()){dirs.push(name);continue;}
+    if(!entry.isFile())throw new Error('Unsupported package entry: '+name);
+    const remaining=16*1024*1024-bytes;
+    const data=await readBounded(path.join(base,name),Math.min(remaining,8*1024*1024));
+    bytes+=data.length;
+    records.push(name+'\0'+sha(data)+'\n');
+    if(destination){
+     const target=path.join(destination,pkg,name);
+     await fs.mkdir(path.dirname(target),{recursive:true});
+     await fs.writeFile(target,data,{flag:'wx'});
+    }
    }
   }
   if(sha(records.sort().join(''))!==expected)throw new Error('Package digest mismatch: '+pkg);

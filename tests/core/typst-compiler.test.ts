@@ -23,11 +23,11 @@ test('managed releases select the official archive for each supported architectu
 
 test('figure subprocesses stop on timeout or cancellation and bound captured bytes',async()=>{
  const idle=['-e','setTimeout(()=>{},10000)'];
- await expect(runFigureProcess(process.execPath,idle,undefined,64,50)).rejects.toThrow('timed out');
+ await expect(runFigureProcess(process.execPath,idle,undefined,{timeoutMs:50,maxStdout:64})).rejects.toThrow('timed out');
  const controller=new AbortController();
  const job=runFigureProcess(process.execPath,idle,controller.signal);
  controller.abort();await expect(job).rejects.toThrow('cancelled');
- await expect(runFigureProcess(process.execPath,['-e','console.log("0123456789")'],undefined,4)).rejects.toThrow('budget');
+ await expect(runFigureProcess(process.execPath,['-e','console.log("0123456789")'],undefined,{maxStdout:4})).rejects.toThrow('budget');
 });
 test('failed repair keeps the active selection and removal preserves unrelated files',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-typst-repair-'));
@@ -58,6 +58,8 @@ test('failed repair keeps the active selection and removal preserves unrelated f
 test('renderer discovery is local, opt-in and independent of executable availability',async()=>{
  const enabled=process.env.H5P_MCP_TYPST_ENABLED,bin=process.env.H5P_MCP_TYPST_BIN;
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-figure-discovery-'));
+ const sandbox=process.env.H5P_MCP_TYPST_SANDBOX;
+ process.env.H5P_MCP_TYPST_SANDBOX='docker';
  const exportRoot=process.env.H5P_MCP_EXPORT_DIR;
  process.env.H5P_MCP_EXPORT_DIR=root;
  process.env.H5P_MCP_TYPST_ENABLED='0';const off=new Service();
@@ -68,6 +70,10 @@ test('renderer discovery is local, opt-in and independent of executable availabi
   expect(off.tools().some(t=>t.name==='render_force_figure')).toBe(false);
   expect(local.tools().some(t=>t.name==='render_force_figure')).toBe(true);
   expect(remote.tools().some(t=>t.name==='render_force_figure')).toBe(false);
+  expect(off.tools().some(t=>t.name==='render_typst_figure')).toBe(false);
+  expect(local.tools().some(t=>t.name==='render_typst_figure')).toBe(true);
+  expect(remote.tools().some(t=>t.name==='render_typst_figure')).toBe(false);
+  await expect(remote.call('render_typst_figure',{})).rejects.toThrow();
   await expect(remote.call('render_force_figure',{})).rejects.toThrow();
   const bad=await local.call('render_force_figure',{source:'#read("private")'});
   expect(bad.structuredContent.diagnostics[0].code).toBe('SCHEMA_VALIDATION_FAILED');
@@ -76,7 +82,7 @@ test('renderer discovery is local, opt-in and independent of executable availabi
   expect(valid('error_report',result.structuredContent)).toBe(true);
  }finally{
   await off.close();await local.close();await remote.close();
-  restore('H5P_MCP_TYPST_ENABLED',enabled);restore('H5P_MCP_TYPST_BIN',bin);restore('H5P_MCP_EXPORT_DIR',exportRoot);
+  restore('H5P_MCP_TYPST_ENABLED',enabled);restore('H5P_MCP_TYPST_BIN',bin);restore('H5P_MCP_EXPORT_DIR',exportRoot);restore('H5P_MCP_TYPST_SANDBOX',sandbox);
   await fs.rm(root,{recursive:true,force:true});
  }
 });

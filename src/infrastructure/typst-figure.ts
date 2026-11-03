@@ -4,7 +4,7 @@ import os from 'node:os';
 import {profile,sha,verifyProfile} from './typst-profile.js';
 import {invoke} from './typst-process.js';
 import {managedExecutable,typstVersion} from './typst-compiler.js';
-import {load} from './runtime.js';
+import {compileSinglePage,pixelsPerInch} from './typst-page.js';
 import {readBounded} from './read-bounded.js';
 
 const version=typstVersion;
@@ -72,24 +72,18 @@ export async function renderForceSpec(input:Partial<Spec>,output:string,signal?:
   const json=JSON.stringify(spec,null,2)+'\n';
   await fs.writeFile(path.join(root,'figure.typ'),source);await fs.writeFile(path.join(root,'figure.json'),json);
   const files:Record<string,Buffer>={'figure.typ':Buffer.from(source),'figure.json':Buffer.from(json)};
-  for(const ext of ['svg','png']){
-   const name='figure.'+ext, target=path.join(work,name);
-   await invoke(status.executable,['compile','--root',root,'--package-path',packages,'--package-cache-path',cache,
-    '--ignore-system-fonts','--creation-timestamp','0','--ppi','192',path.join(root,'figure.typ'),target],signal);
-   files[name]=await readBounded(target,4*1024*1024);
-  }
-  // Dimensions are an output check for this fixed template, not a policy for arbitrary SVG uploads.
-  const probe=load('probe-image-size').sync;
-  const png=probe(files['figure.png']),svg=probe(files['figure.svg']);
-  if(png?.type!=='png'||png.width<=0||png.height<=0||png.width*png.height>16000000)
-   throw failure('INVALID_OUTPUT','Invalid PNG dimensions.');
-  if(svg?.type!=='svg'||svg.wUnits!=='pt'||svg.hUnits!=='pt'||!Number.isFinite(svg.width+svg.height)||svg.width<=0||svg.height<=0)
-   throw failure('INVALID_OUTPUT','Invalid SVG dimensions.');
-  const {width,height}=png;
+  const page=await compileSinglePage(status.executable,root,packages,cache,signal);
+  files['figure.svg']=page.svg;
+  files['figure.png']=page.png;
   const manifest={version:1,template:'vertical-equilibrium',compiler:status.detected,
-   compilerSha256:sha(await readBounded(status.executable,128*1024*1024)),packages:profile,fonts:'embedded',ppi:192,
-   image:{path:'figure.png',mime:'image/png',width,height,alt:spec.alt},master:{path:'figure.svg',mime:'image/svg+xml',width:svg.width,height:svg.height,unit:'pt'},
+   compilerSha256:sha(await readBounded(status.executable,128*1024*1024)),packages:profile,fonts:'embedded',ppi:pixelsPerInch,
+   image:{path:'figure.png',mime:'image/png',width:page.pngWidth,height:page.pngHeight,alt:spec.alt},master:{path:'figure.svg',mime:'image/svg+xml',width:page.widthPt,height:page.heightPt,unit:'pt'},
    hashes:Object.fromEntries(Object.entries(files).map(([name,data])=>[name,sha(data)]))};
+  return await publishFigure(output,files,manifest,signal);
+ }finally{await fs.rm(work,{recursive:true,force:true});}
+}
+
+export async function publishFigure<T>(output:string,files:Record<string,Buffer>,manifest:T,signal?:AbortSignal) {
   files['manifest.json']=Buffer.from(JSON.stringify(manifest,null,2)+'\n');
   signal?.throwIfAborted();
   await fs.mkdir(output); // Exclusive claim; preserve any existing destination.
@@ -101,5 +95,4 @@ export async function renderForceSpec(input:Partial<Spec>,output:string,signal?:
    }
   }catch(error){for(const target of created)await fs.unlink(target);await fs.rmdir(output);throw error;}
   return {ok:true,directory:output,manifest};
- }finally{await fs.rm(work,{recursive:true,force:true});}
 }

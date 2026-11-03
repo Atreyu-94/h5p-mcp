@@ -1,6 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "typst_figure_input": {
+      "type": "object", "additionalProperties": false, "required": ["source", "alt"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1, "maxLength": 65536},
+        "alt": {"type": "string", "minLength": 1, "maxLength": 512}
+      }
+    },
     "force_figure_input": {
       "type": "object",
       "additionalProperties": false,
@@ -982,7 +989,7 @@
       "authoring_report"
     ]
   },
-  "optionalFigures": {"render_force_figure": ["force_figure_input", "force_figure_output"]},
+  "optionalFigures": {"render_typst_figure": ["typst_figure_input", "force_figure_output"], "render_force_figure": ["force_figure_input", "force_figure_output"]},
   "remote": {
     "execution_supported": true,
     "requires": [

@@ -47,6 +47,21 @@ jobs:
           $report=Get-Content retirement-parity.json -Raw | ConvertFrom-Json
           ./tests/tooling/package-probe.ps1 -Bun (Get-Command bun).Source -Libraries (Join-Path $report.artifacts 'data/libraries')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Verify offline Typst source rendering on a Linux Docker engine
+        if: github.event_name == 'workflow_dispatch' && matrix.os == 'ubuntu-24.04'
+        run: |
+          $env:H5P_TEST_TYPST_DOCKER='1'
+          $env:H5P_MCP_TYPST_ENABLED='1'
+          $env:H5P_MCP_TYPST_SANDBOX='docker'
+          $env:H5P_MCP_TYPST_PACKAGES=Join-Path $env:RUNNER_TEMP 'typst-source-packages'
+          docker pull ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          bun dist/core/cli.js figure setup $env:H5P_MCP_TYPST_PACKAGES
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          bun test tests/core/typst-sandbox.test.ts
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tests/tooling/typst-source-probe.mjs (Get-Command bun).Source dist/core/cli.js (Join-Path $env:RUNNER_TEMP 'typst-source-figures')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Exercise optional managed Typst and local MCP on this host
         if: github.event_name == 'workflow_dispatch'
         run: |

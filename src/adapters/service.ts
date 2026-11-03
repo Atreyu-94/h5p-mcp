@@ -29,7 +29,9 @@ export class Service {
  private vaultPromise?:Promise<Vault>;
  constructor(private readonly principal:Principal={tenant:'local',owner:'local'},options:{data?:string;store?:string;immutable?:boolean;adminScopes?:string[]}={}){
   if(process.env.H5P_MCP_TYPST_ENABLED==='1')
-   Object.assign(this.definitions,operations.optionalFigures);
+   this.definitions.render_force_figure=operations.optionalFigures.render_force_figure;
+  if(process.env.H5P_MCP_TYPST_ENABLED==='1' && process.env.H5P_MCP_TYPST_SANDBOX==='docker')
+   this.definitions.render_typst_figure=operations.optionalFigures.render_typst_figure;
   this.principal=Object.freeze({...principal});
   if(options.data)this.data=options.data;
   this.store=options.store||path.resolve(process.env.H5P_MCP_STORE_DIR||path.join(this.data,'objects'));
@@ -136,12 +138,14 @@ export class Service {
  }
  async dispatch(name:string,args:Native,signal:AbortSignal):Promise<Native> {
   if(!this.allowed(name)) throw failure('PERMISSION_DENIED');
-  if(name==='render_force_figure' && Object.hasOwn(this.definitions,name)){
+  if((name==='render_force_figure'||name==='render_typst_figure') && Object.hasOwn(this.definitions,name)){
    return this.figurePool.run(async()=>{
     const {renderForceSpec}=await import('../infrastructure/typst-figure.js');
     const parent=await this.authorize(this.exportDir,'EXPORT');await fs.mkdir(parent,{recursive:true});
     const directory=await this.authorize(path.join(parent,'figure-'+randomUUID()),'EXPORT');
-    const figure=await renderForceSpec(args,directory,signal);
+    const figure=name==='render_typst_figure'
+     ?await (await import('../infrastructure/typst-sandbox.js')).renderTypstFigure(args,directory,signal)
+     :await renderForceSpec(args,directory,signal);
     try{
      const asset=await (await this.vault()).upload('asset','image/png',createReadStream(path.join(directory,'figure.png')),86400000,signal);
      return {ok:true,directory,manifest:figure.manifest,asset_id:asset.id,
@@ -222,7 +226,7 @@ export class Service {
  async call(name:string,args:Native,signal:AbortSignal=AbortSignal.timeout(limit('SECONDS',300)*1000)):Promise<Native> {
   if(Object.hasOwn(aliases,name)) return this.legacy(name,args,signal);
   const definition=this.definitions[name];
-  let result:Native;
+  let result:Native,compilerDiagnostic:string|undefined;
   try {
    checkTree(args);
    if(!definition) throw failure('SCHEMA_VALIDATION_FAILED');
@@ -233,13 +237,15 @@ export class Service {
    if(Buffer.byteLength(JSON.stringify(result))>limit('OUTPUT_BYTES',16777216)) throw failure('LIMIT_EXCEEDED');
   } catch(error:Native) {
    const code=['TimeoutError','AbortError'].includes(error.name)?'BACKEND_TIMEOUT':error.code==='EEXIST'?'OUTPUT_ALREADY_EXISTS':error.code==='ENOENT'?'ASSET_NOT_FOUND':['EACCES','EPERM'].includes(error.code)?'PERMISSION_DENIED':error.code;
+   if(name==='render_typst_figure' && typeof error.compilerDiagnostic==='string')compilerDiagnostic=error.compilerDiagnostic;
    const item=diagnostic({...error,code});
    const validation=['SCHEMA_VALIDATION_FAILED','LIBRARY_NOT_INSTALLED','LIBRARY_VERSION_MISMATCH','UNSAFE_ARCHIVE','STALE_PREPARATION','ASSET_NOT_FOUND','MIME_MISMATCH'].includes(item.code);
    result={...report(validation?'validation':'operational_error',false,validation&&Array.isArray(error.details)?error.details:[item]),...feedback(error.feedback)};
    if(name==='prepare_h5p_activity') result.activity=null;
   }
   const content:Native[]=[{type:'text',text:JSON.stringify(result)}];
-  if(name==='render_force_figure' && result.ok)content.push({type:'resource_link',uri:result.preview.uri,name:'Force diagram',mimeType:'image/png'});
+  if(compilerDiagnostic)content.push({type:'text',text:compilerDiagnostic});
+  if((name==='render_force_figure'||name==='render_typst_figure') && result.ok)content.push({type:'resource_link',uri:result.preview.uri,name:'Figure preview',mimeType:'image/png'});
   if(result.artifact) content.push({type:'resource_link',uri:result.artifact.uri,name:'H5P package',mimeType:'application/zip',size:result.artifact.size});
   if(result.kind==='artifact'&&result.uri)content.push({type:'resource_link',uri:result.uri,name:'Stored H5P package',mimeType:'application/zip',size:result.size});
   return {content,structuredContent:result,isError:result.kind==='operational_error'};
