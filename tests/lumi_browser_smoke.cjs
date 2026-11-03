@@ -16,6 +16,57 @@ const { containsLatex } = require('../dist/core/h5p/math.js');
 const mathMode = process.env.H5P_MCP_MATH_SMOKE === '1';
 const user = { id: 'smoke', name: 'Smoke', email: '', type: 'local' };
 
+// The five named packages come from equations-probe.mjs.
+async function checkEquationCase(name, page, frame) {
+  const math = 'mjx-container:visible, .MathJax:visible';
+  const check = () => frame.getByRole('button', {name: /^Check\b/i}).click();
+  const score = () => page.evaluate(() => H5P.instances[0].getScore());
+  const assert = require('node:assert/strict');
+  const cleanMath = async scope => {
+    await scope.locator(math).first().waitFor();
+    assert.equal(await scope.locator('mjx-merror, [data-mjx-error], .MathJax_Error').count(), 0);
+  };
+  switch (name) {
+    case 'control.h5p':
+      assert.equal(await frame.locator(math).count(), 0);
+      break;
+    case 'feedback.h5p': {
+      const feedback = frame.locator('.h5p-question-feedback');
+      assert.equal(await frame.getByText(/Try counting both halves|Each half contributes/).filter({visible:true}).count(), 0);
+      assert.equal(await frame.locator(math).count(), 0);
+      for (const [label, expected, words] of [['False',0,'Try counting both halves'],['True',1,'Each half contributes']]) {
+        await frame.locator('.h5p-true-false-answer').filter({hasText:new RegExp('^'+label)}).click();
+        await check();
+        await feedback.getByText(words,{exact:false}).first().waitFor();
+        await cleanMath(feedback);
+        assert.equal(await score(),expected);
+        if (!expected) await frame.getByRole('button',{name:/^Retry\b/i}).click();
+      }
+      break;
+    }
+    case 'option.h5p':
+      await cleanMath(frame.locator('.h5p-answer').filter({has:frame.locator('mjx-container, .MathJax')}).first());
+      break;
+    case 'accordion.h5p':
+      await frame.locator('.h5p-panel-button').first().click();
+      await cleanMath(frame.locator('.h5p-panel-content').first());
+      break;
+    case 'blanks.h5p':
+      for (const [value, expected] of [['4',0],['5',1],['5.0',1]]) {
+        await cleanMath(frame);
+        await frame.locator('input[type=text]:visible').fill(value);
+        await check();
+        assert.equal(await score(),expected);
+        if (value !== '5.0') {
+          await page.reload();
+          await page.waitForFunction(() => window.H5P?.instances?.length > 0);
+          frame = page.frames().find(f => f !== page.mainFrame()) || page.mainFrame();
+        }
+      }
+      break;
+    default: throw new Error('Unexpected equation fixture '+name);
+  }
+}
 (async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lumi-browser-'));
   const pages = new Map();
@@ -93,6 +144,13 @@ const user = { id: 'smoke', name: 'Smoke', email: '', type: 'local' };
         throw new Error(`${name}: expected media was not decoded`);
       const start = frame.getByRole('button', { name: /^(Start|Comenzar)/ });
       if (contentParams[index].introPage?.showIntroPage) await start.first().click();
+      if (process.env.H5P_MCP_EQUATION_SMOKE === '1') {
+        await checkEquationCase(name, page, frame);
+        if (errors.length) throw new Error(name + ': ' + errors.join('; '));
+        console.log(JSON.stringify({name, equationJourney:'passed'}));
+        await page.close();
+        continue;
+      }
       if (mathMode) {
         const questions = contentParams[index].questions;
         if (!questions?.length) throw new Error('Math smoke expects a QuestionSet');

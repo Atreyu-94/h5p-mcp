@@ -32,6 +32,25 @@ test('native HTML and metadata policy blocks changes without rewriting answers o
  for(const changes of [{title:''},{language:'es-419'},{license:'invented'}])expect((await prepareActivity(context,{...activity,...changes})).ok).toBe(false);
 });
 
+test('math uses rendered text boundaries, skips code and currency, and checks the addon once',async()=>{
+ let lookups=0,installed=true;
+ const context={coreApiVersion:{major:1,minor:28},libraries:{
+  getLibrary:async(v:Native)=>{if(v.machineName==='H5P.MathDisplay'){lookups++;if(!installed)throw new Error('absent');}return {runnable:1};},
+  getSemantics:async()=>[{name:'questions',type:'list',field:{type:'text',widget:'html',tags:['p','code','b','br']}}]
+ }};
+ const check=(...questions:string[])=>prepareActivity(context,{title:'Test',language:'en',license:'U',library:'H5P.Blanks 1.14',params:{questions}});
+ const ordinary=await check('<p>$5.00 and $10 or $x$ or 2 g/cm³</p>','<code>\\(unfinished</code>');
+ expect(ordinary.ok).toBe(true);expect(ordinary.mathWarnings).toEqual([]);expect(lookups).toBe(0);
+ const valid=await check('<p><code>$$</code> \\(x<br />+y\\) \\[a_1\\] $$z$$</p>','*2/\\(2\\):tip*','\\(3\\) *3:use \\(3\\)*');
+ expect(valid.ok).toBe(true);expect(valid.mathWarnings).toEqual([{kind:'answer',pointer:'/params/questions/1'}]);expect(lookups).toBe(1);
+ installed=false;
+ for(const text of ['\\(x\\]','<p>\\(x</p><p>y\\)</p>','\\[x<b>y</b>\\]','$$unclosed']){
+  const bad=await check(text);expect(bad.diagnostics[0]).toMatchObject({code:'MATH_DELIMITER_INVALID',pointer:'/params/questions/0'});
+ }
+ expect(lookups).toBe(1);
+ const missing=await check('\\(x\\)');expect(missing.diagnostics[0].reason).toBe('math_library');expect(lookups).toBe(2);
+});
+
 test('native content backend exports corpus, verified media and runtime dependencies through workers',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-native-corpus-')),engine=new Engine();
  try{

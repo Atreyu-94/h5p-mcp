@@ -3,7 +3,12 @@ import path from 'node:path';
 import {Ajv2020} from 'ajv/dist/2020.js';
 import {repositoryRoot} from '../infrastructure/runtime.js';
 import type {Native} from '../domain/types.js';
-const reasons:Record<string,string>={delimiter:'This literal collides with a native Blanks delimiter and has no supported escape.',structure:'Source does not satisfy the authoring schema.',adapter:'No source field or supported adapter represents this native requirement.',pin:'Installed library patch or semantics differ from the supported pin.',library:'The pinned library or semantics are not installed.',duplicate:'IDs must be unique within this activity.',reference:'The referenced ID does not exist.',cardinality:'Single selection requires exactly one correct answer.',scoring:'This scoring policy cannot be represented by the selected mode.',markdown:'Unsupported Markdown syntax; use the documented subset or plain text.',translation:'The requested interface translation is unavailable.',override:'This override does not identify a supported interface text field.',native:'Compiled content does not satisfy the native field contract.'};
+const reasons:Record<string,string>={
+ math_inline:'Close inline math with \\) in the same text.',
+ math_display:'Close display math with \\] in the same text.',
+ math_double:'Close display math with $$ in the same text.',
+ math_library:'LaTeX requires H5P.MathDisplay 1.0. Install the official addon with h5p-mcp admin package <absolute MathDisplay.h5p path>.',
+ delimiter:'This literal collides with a native Blanks delimiter and has no supported escape.',structure:'Source does not satisfy the authoring schema.',adapter:'No source field or supported adapter represents this native requirement.',pin:'Installed library patch or semantics differ from the supported pin.',library:'The pinned library or semantics are not installed.',duplicate:'IDs must be unique within this activity.',reference:'The referenced ID does not exist.',cardinality:'Single selection requires exactly one correct answer.',scoring:'This scoring policy cannot be represented by the selected mode.',markdown:'Unsupported Markdown syntax; use the documented subset or plain text.',translation:'The requested interface translation is unavailable.',override:'This override does not identify a supported interface text field.',native:'Compiled content does not satisfy the native field contract.'};
 const read=(name:string)=>JSON.parse(fs.readFileSync(path.join(repositoryRoot,'h5p_mcp/contracts',name),'utf8'));
 export const base=read('v1.json'), operations=read('operations-v1.json'), codes=read('codes-v1.json');
 export const examples=read('examples-v1.json');
@@ -11,11 +16,19 @@ export const storage=read('storage-v1.json');
 export const authoring=read('authoring-v1.json'),authoringAdapters=read('authoring-adapters-v1.json'),authoringExamples=read('authoring-examples-v1.json');
 const authoringDefs=authoring.$defs,authoringSource={...authoring}; delete authoringSource.$schema; delete authoringSource.$id; delete authoringSource.$defs;
 const defs={...base.$defs,...operations.$defs,...storage.$defs,...authoringDefs,authoring_source:authoringSource};
-export function schema(name:string):Native {
+function schemaBody(name:string):Native {
  const expand=(value:Native):Native=>Array.isArray(value)?value.map(expand):
   value&&typeof value==='object'?value.$ref?expand(defs[value.$ref.split('/').pop()]):
   Object.fromEntries(Object.entries(value).map(([k,v])=>[k,expand(v)])):value;
- return {$schema:base.$schema,...expand(defs[name])};
+ return expand(defs[name]);
+}
+export function schema(name:string):Native {
+ return {$schema:base.$schema,...schemaBody(name)};
+}
+export function toolOutputSchema(name:string):Native {
+ if(name==='preparation_report'||name==='operation_report')return schema(name);
+ // Both fully expanded branches inherit the root dialect.
+ return {$schema:base.$schema,type:'object',anyOf:[schemaBody(name),schemaBody('error_report')]};
 }
 const ajv=new Ajv2020({strict:false,allErrors:false});
 export const validators=new Map<string,ReturnType<typeof ajv.compile>>();

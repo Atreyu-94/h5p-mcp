@@ -114,6 +114,10 @@ is detected, exports include `H5P.MathDisplay 1.0` as an explicit preloaded
 dependency and package its installed files in full export mode. Content without LaTeX
 does not gain that dependency.
 
+Preparation and re-export reject an explicitly opened math expression whose delimiter is missing or mismatched. Keep the pair within the same paragraph and text run. A line break inside a native text run is supported. To teach delimiter syntax, use a Markdown code span or a permitted HTML code element. Review the indicated source field or native parameter. Warnings flag clear single-dollar expressions such as `$x^2$` and literal TeX answer keys in Blanks 1.14. Ordinary prices and units can stay in plain text. Only semantic text fields (including defaults, translations and image alt text) and nested titles are inspected. Paths, attributes and unrelated metadata do not trigger the addon.
+
+After upgrading the backend, prepare old inputs again when their preparation manifest is stale. Previously exported packages remain readable. Frozen sources retain their pinned libraries and rebuild checks.
+
 Keep mathematical answer tokens in Blanks, DragText and MarkTheWords plain when
 their parsers require it; render formulas in rich-text prompts and feedback.
 MathDisplay renders notation; it does not grade symbolic equivalence, validate

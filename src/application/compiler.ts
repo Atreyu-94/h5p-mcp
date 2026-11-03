@@ -5,6 +5,7 @@ import {repositoryRoot} from '../infrastructure/runtime.js';
 import {FileLibraryRepository} from '../h5p/libraries.js';
 import {libraryVersion} from '../h5p/dependencies.js';
 import {prepareNative} from '../h5p/native-content.js';
+import {scanNotation,warningLimit,type MathWarning,type MathMode} from '../domain/notation.js';
 import {checkTree} from '../domain/limits.js';
 import {semanticHash,stableId,renderText,escapeHtml} from '../domain/authoring-source.js';
 import type {Native} from '../domain/types.js';
@@ -15,8 +16,11 @@ const escape=(part:string)=>part.replaceAll('~','~0').replaceAll('/','~1');
 export async function compileSource(source:Native,libraries:string,prepare=true) {
  checkTree(source);
  const diagnostics:Native[]=[],warnings:string[]=[],sourceMap:Record<string,string>={},identities:Record<string,string>={};
+ const mathWarnings:MathWarning[]=[];
+ const addWarning=(issue:MathWarning)=>{if(mathWarnings.length<warningLimit)mathWarnings.push(issue);};
+ const mathError=(pointer:string,mode:MathMode)=>{if(diagnostics.length<=100)diagnostics.push({pointer,reason:'math_'+mode,stage:'source',code:'MATH_DELIMITER_INVALID'});};
  const error=(pointer:string,reason:string,stage='source')=>diagnostics.push({pointer,reason,stage,code:'SCHEMA_VALIDATION_FAILED'});
- const finish=(extra:Native={})=>({ok:!diagnostics.length,diagnostics,warnings,transformations:[],mathematics:{detected:false},source_map:sourceMap,identities,...extra});
+ const finish=(extra:Native={})=>({ok:!diagnostics.length,diagnostics,warnings,mathWarnings,transformations:[],mathematics:{detected:false},source_map:sourceMap,identities,...extra});
  if(!validate(source)){
   for(const issue of validate.errors||[]){const key=issue.params.missingProperty??issue.params.additionalProperty;error(issue.instancePath+(key?'/'+escape(String(key)):''),'structure');}
   return finish();
@@ -46,7 +50,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
  if(source.image){claim(source.image.id,'/image/id');imageFields=await pin(source.image.library,'/image/library','H5P.Image 1.1');if(!Object.hasOwn(normalized.assets,source.image.asset))error('/image/asset','reference');}
  if(diagnostics.length)return finish({normalized});
  const params:Native={};
- function text(value:Native,at:string,native:string){sourceMap[native]=at;try{return renderText(value);}catch{error(at,'markdown');return '';}}
+ function text(value:Native,at:string,native:string){sourceMap[native]=at;try{return renderText(value);}catch(cause:Native){if(cause.mathMode)mathError(at+'/value',cause.mathMode);else error(at,'markdown');return '';}}
  if(['true_false','multi_choice','blanks'].includes(source.type)){
   params.question=text(source.question,'/question','/params/question');
   params.behaviour={enableRetry:normalized.retry,enableSolutionsButton:normalized.show_solution,enableCheckButton:true,autoCheck:false};
@@ -72,6 +76,12 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   sourceMap['/params/behaviour/caseSensitive']='/case_sensitive';
   params.questions=source.blocks.map((block:Native,i:number)=>{
    claim(block.id,`/blocks/${i}/id`);let blanks=0;
+   function inspectSegment(value:string,pointer:string,answer=false){
+    const math=scanNotation(value,'html');
+    if(math.invalid)mathError(pointer,math.invalid);
+    if(math.dollar)addWarning({kind:'dollar',pointer});
+    if(answer&&math.detected)addWarning({kind:'answer',pointer});
+   }
    const rendered=block.segments.map((segment:Native,j:number)=>{
     const at=`/blocks/${i}/segments/${j}`;
     if(segment.answers){
@@ -80,10 +90,13 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
       // Pinned Blanks splits raw *, / and : before decoding entities. The native
       // sanitizer decodes numeric escapes, so these literals cannot round-trip.
       if(/[*/:<>\r\n]/.test(answer)||answer.trim()!==answer){error(at+`/answers/${k}`,'delimiter');return '';}
-      return renderText({format:'plain',value:answer}).slice(3,-4);
+      const rendered=renderText({format:'plain',value:answer}).slice(3,-4);
+      inspectSegment(rendered,at+'/answers/'+k,true);
+      return rendered;
      }).join('/')+'*';
     }
     const value=text(segment,at,`/params/questions/${i}`);
+    inspectSegment(value,at+'/value');
     if(value.includes('*'))error(at,'delimiter');
     return value.slice(3,-4);
    }).join('');
@@ -112,6 +125,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    const result=await compileSource({schema_version:'1',project_id:source.project_id,language:normalized.language,license:normalized.license,...child,ui:{language:normalized.ui.language,missing:normalized.ui.missing,...child.ui},assets:normalized.assets},libraries,false);
    for(const item of result.diagnostics)diagnostics.push({...item,pointer:origin+item.pointer});
    warnings.push(...result.warnings);
+   for(const item of result.mathWarnings)addWarning({...item,pointer:origin+item.pointer});
    if(!result.ok)continue;
    identities[child.id]=result.identities[child.id];
    for(const [id,value] of Object.entries(result.identities))if(id!==child.id)identities[child.id+'/'+id]=value as string;
@@ -167,6 +181,21 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
  let prepared:Native;
  try{prepared=await prepareNative(activity,libraries);}catch(cause:Native){diagnostics.push({pointer:'',stage:'adapter',reason:'adapter',code:cause.code||'LIBRARY_NOT_INSTALLED'});return finish({normalized});}
  const locate=(pointer:string)=>{let at=pointer;while(at){if(Object.hasOwn(sourceMap,at)){const origin=sourceMap[at];let current:Native=source;for(const part of origin.slice(1).split('/')){const key=part.replaceAll('~1','/').replaceAll('~0','~');if(!current||typeof current!=='object'||!Object.hasOwn(current,key))return '';current=current[key];}return origin;}at=at.slice(0,at.lastIndexOf('/'));}return '';};
- for(const item of prepared.diagnostics)diagnostics.push({...item,pointer:locate(item.pointer),stage:'native',reason:locate(item.pointer)?'native':'adapter'});
- return finish({...prepared,ok:!diagnostics.length,diagnostics,warnings:[...warnings,...prepared.warnings],transformations:prepared.transformations.map((item:Native)=>({...item,pointer:locate(item.pointer)})),normalized,source_map:sourceMap,identities});
+ function mathLocation(native:string){
+  const origin=locate(native);
+  let value=source;
+  if(origin)for(const key of origin.slice(1).split('/'))value=value[key.replaceAll('~1','/').replaceAll('~0','~')];
+  return {pointer:origin+(value?.format&&typeof value.value==='string'?'/value':''),block:Array.isArray(value?.segments)};
+ }
+ for(const item of prepared.diagnostics){
+  const math=item.reason?.startsWith('math_');
+  const pointer=math?mathLocation(item.pointer).pointer:locate(item.pointer);
+  diagnostics.push({...item,pointer,stage:'native',reason:math?item.reason:pointer?'native':'adapter'});
+ }
+ for(const issue of prepared.mathWarnings||[]){
+  const location=mathLocation(issue.pointer);
+  // Blanks segments and keys already carry their exact source pointers.
+  if(!location.block)addWarning({...issue,pointer:location.pointer});
+ }
+ return finish({...prepared,ok:!diagnostics.length,diagnostics,mathWarnings,warnings:[...warnings,...prepared.warnings],transformations:prepared.transformations.map((item:Native)=>({...item,pointer:locate(item.pointer)})),normalized,source_map:sourceMap,identities});
 }

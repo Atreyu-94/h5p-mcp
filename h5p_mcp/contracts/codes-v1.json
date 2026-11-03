@@ -20,6 +20,11 @@
       "The operation is not authorized by the host.",
       "Ask the operator to configure the required scope or authorized roots."
     ],
+    "MATH_DELIMITER_INVALID": [
+      false,
+      "The math delimiters do not match within this text.",
+      "Close the expression with its matching delimiter in the same text field and paragraph."
+    ],
     "LIBRARY_NOT_INSTALLED": [
       false,
       "The required library is not installed.",

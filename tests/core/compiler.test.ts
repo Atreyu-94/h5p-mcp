@@ -40,9 +40,34 @@ test('compiler rejects loss, invalid references, incompatible pins and missing t
   expect((await compileSource({...source,extra:'not representable'},libraries)).ok).toBe(false);
  }finally{await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test('math authoring identifies the exact source field, including nested Blanks alternatives',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-equations-'));
+ try{
+  await compilerFixture(root);
+  const libraries=path.join(root,'libraries');
+  for(const format of ['plain','markdown']){
+   const bad=await compileSource({...trueFalse(),question:{format,value:'Close \\(x+1'}},libraries);
+   expect(bad.ok).toBe(false);
+   expect(bad.diagnostics[0]).toMatchObject({pointer:'/question/value',code:'MATH_DELIMITER_INVALID'});
+  }
+  const child={type:'blanks',id:'b',title:'B',library:pin('H5P.Blanks 1.14'),question:plain('Compare $x^2$'),case_sensitive:true,
+   blocks:[{id:'line',segments:[plain('Use \\(x\\). '),{id:'answer',answers:['2','\\(2\\)']}]}]};
+  const result=await compileSource({schema_version:'1',project_id:'p',id:'quiz',title:'Quiz',type:'question_set',
+   library:pin('H5P.QuestionSet 1.21'),pass_percentage:50,questions:[child]},libraries);
+  expect(result.ok).toBe(true);
+  const {feedback}=await import('../../src/adapters/feedback.js');
+  const warnings=feedback(result).warnings.filter((w:string)=>w.startsWith('Math notation'));
+  expect(warnings.length).toBe(2);
+  expect(warnings.join(' ')).toContain('/questions/0/question/value');
+  expect(warnings.join(' ')).toContain('/questions/0/blocks/0/segments/1/answers/1');
+ } finally {await fs.rm(root,{recursive:true,force:true});}
+},120000);
+
 test('bounded text grammar escapes plain HTML and preserves TeX without interpreting its operators',()=>{
  expect(renderText({format:'plain',value:'<script>x</script> & y'})).toBe('<p>&lt;script&gt;x&lt;/script&gt; &amp; y</p>');
  expect(renderText({format:'markdown',value:'**Bold** and *em* \\(x_1 < x_2\\)'})).toBe('<p><strong>Bold</strong> and <em>em</em> \\(x_1 &lt; x_2\\)</p>');
+ expect(renderText({format:'markdown',value:'`\\(bad` and $x_1$ and \\[y\\]'})).toBe('<p><code>\\(bad</code> and $x_1$ and \\[y\\]</p>');
  expect(()=>renderText({format:'markdown',value:'[link](https://example.com)'})).toThrow();
 });
 
@@ -61,14 +86,20 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   const filename=path.join(root,'source.json');await fs.writeFile(filename,JSON.stringify(source));
   const cli=Bun.spawn([process.execPath,fileURLToPath(new URL('../../dist/core/cli.js',import.meta.url)),'compile',filename],{env:{...process.env,H5P_MCP_DATA_DIR:root},stdout:'pipe',stderr:'pipe'});
   const [out,err]=await Promise.all([new Response(cli.stdout).text(),new Response(cli.stderr).text()]);expect({code:await cli.exited,err}).toEqual({code:0,err:''});expect(JSON.parse(out).activity.params).toEqual(checked.activity.params);expect(JSON.parse(out).activity.preparation.libraries).toEqual(checked.activity.preparation.libraries);expect(JSON.parse(out).identities).toEqual(checked.identities);
+  await fs.writeFile(filename,JSON.stringify({...source,question:plain('\\(x')}));
+  const mathCli=Bun.spawn([process.execPath,fileURLToPath(new URL('../../dist/core/cli.js',import.meta.url)),'check',filename],{env:{...process.env,H5P_MCP_DATA_DIR:root},stdout:'pipe'});
+  const mathOutput=JSON.parse(await new Response(mathCli.stdout).text());
+  expect(await mathCli.exited).toBe(1);expect(mathOutput.diagnostics[0]).toMatchObject({pointer:'/question/value',code:'MATH_DELIMITER_INVALID'});
+  expect(mathOutput.diagnostics[0].message).toContain('\\)');expect(mathOutput.source_locations['/question/value'].line).toBe(1);
   await fs.writeFile(filename,'null');
   const invalidCli=Bun.spawn([process.execPath,fileURLToPath(new URL('../../dist/core/cli.js',import.meta.url)),'check',filename],{env:{...process.env,H5P_MCP_DATA_DIR:root},stdout:'pipe',stderr:'pipe'});
   const invalidOutput=await new Response(invalidCli.stdout).text();expect(await invalidCli.exited).toBe(1);expect(JSON.parse(invalidOutput).diagnostics).toEqual((await service.call('check_h5p_source',{source:null})).structuredContent.diagnostics);
   const failure=(await service.call('prepare_stored_h5p_activity',{activity:{title:'Bad',library:'H5P.TrueFalse 1.8',params:{question:'<script>unsafe</script>',correct:'neither'}}})).structuredContent;
   expect(failure.ok).toBe(false);expect(failure.diagnostics.length).toBeGreaterThanOrEqual(2);expect(failure.transformations[0].pointer).toBe('/params/question');expect(JSON.stringify(failure)).not.toContain(root);
-  const stored=(await service.call('prepare_stored_h5p_activity',{activity:{title:'Math',library:'H5P.TrueFalse 1.8',params:{question:'<p>\\(x\\)</p>',correct:'true'}}})).structuredContent;
+  const stored=(await service.call('prepare_stored_h5p_activity',{activity:{title:'Math',library:'H5P.TrueFalse 1.8',params:{question:'<p>\\(x\\) and $y^2$</p>',correct:'true'}}})).structuredContent;
   expect(stored.kind).toBe('preparation');expect(stored.mathematics.detected).toBe(true);expect(stored.warnings.length).toBeGreaterThan(0);expect(valid('stored_output',stored)).toBe(true);
   const persisted=await (await service.vault()).objects.get(stored.object_id,'preparation');expect(persisted.metadata.feedback.mathematics.detected).toBe(true);
+  expect(persisted.metadata.feedback.warnings).toEqual(stored.warnings);expect(stored.warnings.join(" ")).toContain("/params/question");
  }finally{await service.close();if(oldExport===undefined)delete process.env.H5P_MCP_EXPORT_DIR;else process.env.H5P_MCP_EXPORT_DIR=oldExport;await fs.rm(root,{recursive:true,force:true});}
 },120000);
 

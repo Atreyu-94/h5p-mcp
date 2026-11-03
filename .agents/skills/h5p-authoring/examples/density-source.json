@@ -33,7 +33,7 @@
       },
       "selected_feedback": {
         "format": "plain",
-        "value": "The mass doubles. Compare the mass of one cubic centimetre of each sample."
+        "value": "The mass doubles, but so does the volume. Divide 400 g by 200 cm³. How does the mass of one cubic centimetre of B compare with that of A?"
       }
     },
     {
@@ -44,7 +44,7 @@
       },
       "selected_feedback": {
         "format": "plain",
-        "value": "Each sample has 2 g per cm³. Explain to a partner why doubling both quantities leaves their ratio unchanged."
+        "value": "Density is mass divided by volume, \\(\\rho=\\frac{m}{V}\\), where m is mass and V is volume. For A, \\(\\frac{200\\,\\mathrm{g}}{100\\,\\mathrm{cm}^3}=2\\,\\mathrm{g/cm^3}\\). For B, \\(\\frac{400\\,\\mathrm{g}}{200\\,\\mathrm{cm}^3}=2\\,\\mathrm{g/cm^3}\\). Explain to a partner why doubling both quantities leaves the density unchanged."
       }
     },
     {
@@ -55,7 +55,7 @@
       },
       "selected_feedback": {
         "format": "plain",
-        "value": "The volume doubles. Check what happens to the mass before comparing the samples again."
+        "value": "If only the volume doubled, the density would halve. Compare the two masses. What happens to the mass per cubic centimetre when both mass and volume double?"
       }
     }
   ]

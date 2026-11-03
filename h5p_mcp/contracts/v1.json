@@ -20,6 +20,7 @@
           "type": "string",
           "enum": [
             "LIBRARY_NOT_INSTALLED",
+            "MATH_DELIMITER_INVALID",
             "LIBRARY_VERSION_MISMATCH",
             "SCHEMA_VALIDATION_FAILED",
             "UNSUPPORTED_SEMANTIC_TYPE",

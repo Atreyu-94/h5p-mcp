@@ -47,6 +47,9 @@ try {
  assert.equal(assetResponse.status,201);const asset=await assetResponse.json();
  source.assets={picture:asset.object_id};
  source.image={id:'picture',asset:'picture',mime:'image/png',alt:'A square',library:{name:'H5P.Image 1.1',...pins['H5P.Image 1.1']},copyright:{author:'Teacher',license:'CC BY'}};
+ const malformed=await client.callTool({name:'prepare_stored_h5p_source',arguments:{source:{...source,question:{format:'plain',value:'\\(x'}}}});
+ assert.equal(malformed.structuredContent.diagnostics[0].code,'MATH_DELIMITER_INVALID');
+ assert.equal(malformed.structuredContent.diagnostics[0].pointer,'/question/value');
  const sourcePrepared=await call(client,'prepare_stored_h5p_source',{source});
  const sourceArtifact=await call(client,'export_prepared_h5p_activity',{preparation_id:sourcePrepared.object_id,idempotency_key:'http-source'});
  const remoteDownload=await fetch(settings.resource.replace('/mcp','/artifacts/'+sourceArtifact.object_id),{headers:{authorization:'Bearer '+access}});

@@ -6,6 +6,7 @@ import type {Native, Activity, Pointer} from '../domain/types.js';
 // or every content type's editor widget/business rules.
 import {createMediaResolver,type SaveMedia} from '../infrastructure/media.js';
 import {randomUUID} from 'node:crypto';
+import {scanNotation,warningLimit,type MathWarning} from '../domain/notation.js';
 import {inspectMath} from '../h5p/math.js';
 import {checkTree, limit} from '../domain/limits.js';
 import {scalarErrors} from '../domain/semantics.js';
@@ -26,6 +27,27 @@ export async function prepareActivity(context: PreparationContext, activity: Act
     return {ok:false, errors:[error.message], diagnostics:[diagnostic(['params'],error.message,error.code)], warnings:[], mathematics:{detected:false}, activity:{...activity, params:{}}};
   }
   const warnings = new Set(['Native field checks do not verify editor-widget rules, HTML safety, playback, accessibility or Moodle grading.']);
+  const mathWarnings:MathWarning[]=[];
+  let hasMath=false;
+  function inspectNotation(value:string,at:Pointer,blanks=false){
+    const result=scanNotation(value,'html');
+    hasMath ||= result.detected;
+    if(result.invalid&&diagnostics.length<=100){
+      fail(at,'Invalid mathematical delimiter','MATH_DELIMITER_INVALID');
+      diagnostics[diagnostics.length-1].reason='math_'+result.invalid;
+    }
+    if(result.dollar&&mathWarnings.length<warningLimit)mathWarnings.push({kind:'dollar',pointer:pointer(at)});
+    if(blanks&&result.detected&&mathWarnings.length<warningLimit){
+      // Blanks 1.14 splits *solution:tip* before splitting solutions on '/'.
+      for(const match of value.matchAll(/\*([^*\r\n]*)\*/g)){
+        const solutions=match[1].split(':',1)[0].split('/');
+        if(solutions.some(answer=>scanNotation(answer,'html').detected)){
+          mathWarnings.push({kind:'answer',pointer:pointer(at)});
+          break;
+        }
+      }
+    }
+  }
   const schemas = new Map();
   let visitedFields = 0;
   let exhausted = false;
@@ -55,19 +77,19 @@ export async function prepareActivity(context: PreparationContext, activity: Act
       return result.fields;
     } catch (error: Native) { fail(at, `library ${library} unavailable: ${error.message}`, error.code === 'TARGET_INCOMPATIBLE' ? error.code : 'LIBRARY_NOT_INSTALLED'); }
   }
-  async function fields(entries: Native[], value: Native, at: Pointer, depth: number): Promise<Native> {
+  async function fields(entries: Native[], value: Native, at: Pointer, depth: number, library:string): Promise<Native> {
     if (!object(value)) { fail(at, 'expected object'); return value; }
     const result: Record<string,Native> = {};
     const names = new Set(entries.map(e => e.name));
     for (const key of Object.keys(value)) if (!names.has(key)) fail([...at,key], 'unknown field');
     for (const entry of entries) {
-      const item = await field(entry, value[entry.name], [...at,entry.name], depth + 1);
+      const item = await field(entry, value[entry.name], [...at,entry.name], depth + 1, library);
       if (item !== undefined) result[entry.name] = item;
     }
     return result;
   }
   const media = createMediaResolver({saveMedia:context.saveMedia, assets, usedAssets, warnings, fail});
-  async function field(entry: Native, value: Native, at: Pointer, depth: number): Promise<Native> {
+  async function field(entry: Native, value: Native, at: Pointer, depth: number, library:string): Promise<Native> {
     if (exhausted) return undefined;
     if (++visitedFields > limit('NODES',100000)) { exhausted = true; fail(at,'Expanded field budget exceeded','INPUT_TOO_LARGE'); return undefined; }
     if (depth > limit('DEPTH',64)) { fail(at, 'maximum nesting depth exceeded'); return value; }
@@ -75,7 +97,7 @@ export async function prepareActivity(context: PreparationContext, activity: Act
     // that field's value; this must agree with Lumi's ContentScanner.
     if (entry.type === 'group' && entry.fields?.length === 1) {
       if (value === undefined && entry.optional) return undefined;
-      return field(entry.fields[0], value, at, depth + 1);
+      return field(entry.fields[0], value, at, depth + 1, library);
     }
     if (value === undefined) {
       if (entry.default !== undefined) value = structuredClone(entry.default);
@@ -84,12 +106,12 @@ export async function prepareActivity(context: PreparationContext, activity: Act
       else { fail(at, 'required field missing'); return undefined; }
     }
     switch (entry.type) {
-      case 'group': return fields(entry.fields || [], value, at, depth);
+      case 'group': return fields(entry.fields || [], value, at, depth, library);
       case 'list':
         if (!Array.isArray(value)) { fail(at, 'expected list'); return value; }
         if (entry.min != null && value.length < entry.min) fail(at, `minimum ${entry.min} items`);
         if (entry.max != null && value.length > entry.max) fail(at, `maximum ${entry.max} items`);
-        { const items = []; for (let i = 0; i < value.length; i++) items.push(await field(entry.field, value[i], [...at,i], depth + 1)); return items; }
+        { const items = []; for (let i = 0; i < value.length; i++) items.push(await field(entry.field, value[i], [...at,i], depth + 1, library)); return items; }
       case 'library': {
         if (!object(value)) { fail(at, 'expected library object'); return value; }
         if (!entry.options?.includes(value.library)) { fail(at, 'library is not an allowed exact version', 'LIBRARY_VERSION_MISMATCH'); return value; }
@@ -108,6 +130,7 @@ export async function prepareActivity(context: PreparationContext, activity: Act
           if (typeof metadata.title !== 'string' || !/^.{0,255}$/.test(metadata.title))
             fail([...at,'metadata','title'], 'expected title up to 255 characters without line breaks', 'INVALID_METADATA');
           else {
+            inspectNotation(metadata.title,[...at,'metadata','title']);
             const proposed=inspectText({tags:[]},metadata.title);
             if(proposed!==metadata.title){
               transformations.push({pointer:pointer([...at,'metadata','title']),path:displayPath([...at,'metadata','title']),before:metadata.title,after:proposed});
@@ -116,10 +139,11 @@ export async function prepareActivity(context: PreparationContext, activity: Act
           }
         }
         return { ...value, metadata, subContentId: id,
-          params: entries ? await fields(entries, value.params, [...at,'params'], depth + 1) : value.params };
+          params: entries ? await fields(entries, value.params, [...at,'params'], depth + 1, value.library) : value.params };
       }
       case 'text':
         if(typeof value==='string') {
+          inspectNotation(value,at,library==='H5P.Blanks 1.14'&&at.at(-2)==='questions'&&at.at(-3)==='params');
           const proposed=inspectText(entry,value);
           if(proposed!==value) {
             transformations.push({pointer:pointer(at),path:displayPath(at),before:value,after:proposed});
@@ -148,10 +172,15 @@ export async function prepareActivity(context: PreparationContext, activity: Act
     return value;
   }
   const entries = await schema(activity.library, ['library'], true);
-  const params = entries ? await fields(entries, activity.params, ['params'], 0) : activity.params;
-  const mathematics = errors.length ? {detected:false} : await inspectMath(context.libraries, params);
-  if (mathematics.error) fail(['params'], mathematics.error, 'LIBRARY_NOT_INSTALLED');
+  const params = entries ? await fields(entries, activity.params, ['params'], 0, activity.library) : activity.params;
+  // Apply the existing budget to defaults and other expanded values as well as the raw input.
+  if(!errors.length)checkTree(params);
+  const mathematics = errors.length ? {detected:false} : await inspectMath(context.libraries, hasMath);
+  if (mathematics.error) {
+    fail(['params'], mathematics.error, 'LIBRARY_NOT_INSTALLED');
+    diagnostics[diagnostics.length-1].reason='math_library';
+  }
   if (mathematics.detected) warnings.add('LaTeX requires MathDisplay at playback. Check TeX syntax and rendering in the destination; this is not a symbolic answer checker.');
   for (const id of Object.keys(assets)) if (!usedAssets.has(id)) fail(['assets',id], 'asset is not referenced in a native media field');
-  return { ok: errors.length === 0, errors, diagnostics, warnings: [...warnings], mathematics, transformations, activity: { ...activity, params } };
+  return { ok: errors.length === 0, errors, diagnostics, warnings: [...warnings], mathWarnings, mathematics, transformations, activity: { ...activity, params } };
 }

@@ -8,7 +8,7 @@ Try an intended answer, a legitimate variant and an incorrect response. In Blank
 
 ## Worked example · density
 
-The learner sees two labelled samples in [the editable source](../examples/density-source.json). A has 200 g in 100 cm³ and B has 400 g in 200 cm³. Each ratio is 2 g/cm³. The single-choice point records the prediction. After feedback, collect a spoken or written explanation. Look for the student to connect both doubling factors to the unchanged quotient.
+The learner sees two labelled samples in [the editable source](../examples/density-source.json). A has 200 g in 100 cm³ and B has 400 g in 200 cm³. The single-choice point records the prediction before students see the density equation. Feedback on the correct choice defines density as mass divided by volume and works through both quotients in g/cm³. Feedback on each distractor asks the learner to reconsider the quantity they overlooked. After feedback, collect a spoken or written explanation. Look for the student to connect both doubling factors to the unchanged quotient.
 
 - “Double” might reflect attention to mass alone (hypothesized). Ask what mass corresponds to one cm³ in each sample.
 - “Half” might reflect attention to volume alone (hypothesized). Ask which other quantity changes.

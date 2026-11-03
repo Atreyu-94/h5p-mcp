@@ -11,7 +11,7 @@ import type {CoreRequest,Native} from '../domain/types.js';
 import {checkTree,limit} from '../domain/limits.js';
 import {projectSemantics} from '../domain/contracts.js';
 import {Resources,hash,canonical} from './resources.js';
-import {base,operations,codes,examples,storage,authoring,authoringAdapters,authoringExamples,schema,valid,invalidInput,report,failure,diagnostic,verification} from './contracts.js';
+import {base,operations,codes,examples,storage,authoring,authoringAdapters,authoringExamples,schema,toolOutputSchema,valid,invalidInput,report,failure,diagnostic,verification} from './contracts.js';
 const scopes:Record<string,string>={refresh_h5p_catalog:'catalog:refresh',install_h5p_library:'libraries:install',install_h5p_library_package:'libraries:install',capture_h5p_library_snapshot:'libraries:install',activate_h5p_library_snapshot:'libraries:install'};
 export const aliases:Record<string,string>={list_h5p_activities:'search_h5p_types',get_h5p_activity_schema:'get_h5p_type_contract',create_h5p_activity:'prepare_h5p_activity',export_h5p:'export_h5p_activity',validate_h5p:'validate_h5p_package'};
 async function resolved(filename:string):Promise<string> {
@@ -84,7 +84,7 @@ export class Service {
  tools() {
   const tools:Native[]=Object.entries(this.definitions).filter(([name])=>this.allowed(name)).map(([name,[input,output]])=>({
    name,description:descriptions[name],inputSchema:schema(input),
-   outputSchema:output==='preparation_report'||output==='operation_report'?schema(output):{type:'object',anyOf:[schema(output),schema('error_report')]},
+   outputSchema:toolOutputSchema(output),
    annotations:{readOnlyHint:['compile_h5p_source','check_h5p_source','search_h5p_types','get_h5p_type_contract','validate_h5p_package','validate_stored_h5p_package','list_stored_h5p_objects'].includes(name),destructiveHint:name==='revoke_stored_h5p_object',openWorldHint:!!scopes[name]}
   }));
   for(const [name,target] of Object.entries(aliases)) {

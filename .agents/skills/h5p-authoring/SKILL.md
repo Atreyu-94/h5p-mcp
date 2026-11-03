@@ -8,6 +8,8 @@ license: Apache-2.0
 
 Infer the requested outcome from the teacher's words. Identify the learner, the action they should perform and what would count as evidence. State a reasonable assumption about prior knowledge. Ask when the answer would change the task, scoring or destination. Use the requested language for the learner and the teacher.
 
+When designing, building or reviewing an activity, place a given formula beside the data students need to apply it. When students must discover the relationship, save the equation for feedback after their prediction. Keep familiar quantities and units in plain text. Both source and native activities follow the [mathematics guide](references/mathematics.md).
+
 ## Design a learning experience
 
 Deliver the proposal at the level the teacher can act on. For a short activity, give the prompt, learner action, expected evidence and next teaching move. For a sequence, sketch what students see, do and learn from each response. Finish at the storyboard when the teacher requests design only.
@@ -18,7 +20,7 @@ Choose the interaction by the evidence it can collect. Read [selecting content t
 
 - For scored tasks, use [question design](references/question-design.md). For screens, diagrams or data, use [visual design](references/visual-design.md). When NGSS alignment is requested or the curriculum specifies it, use [the NGSS guide](references/ngss.md). These guides also apply in design and review.
 - For supported TrueFalse, MultiChoice, Blanks, Accordion and QuestionSet source adapters, read `h5p-authoring://v1/schema`, `h5p-authoring://v1/adapters` and `h5p-authoring://v1/examples`. Use compile_h5p_source and check_h5p_source to inspect, then build_h5p_source for a local content-only package that requires destination libraries. [Density practice](examples/density-source.json) is an editable source for this route. Set content and UI languages separately.
-- For native authoring, use search_h5p_types, get_h5p_type_contract (including nested libraries), prepare_h5p_activity, then export_h5p_activity and validate_h5p_package. The four other examples are native inputs. Consult [native semantics](references/native-semantics.md), [media](references/media.md) and [mathematics](references/mathematics.md) as needed.
+- For native authoring, use search_h5p_types, get_h5p_type_contract (including nested libraries), prepare_h5p_activity, then export_h5p_activity and validate_h5p_package. The four other examples are native inputs. Consult [native semantics](references/native-semantics.md) and [media](references/media.md) as needed.
 - For persistent preparation and full-package export, follow [workflow](references/workflow.md). Supply uploaded asset IDs to prepare_stored_h5p_source or prepare_stored_h5p_activity, then use export_prepared_h5p_activity. For failed checks, use [validation errors](references/validation-errors.md).
 
 Deliver the editable source or native input, requested artifact, and a brief teacher note describing what is scored and how to use the responses. Keep instructional and diagnostic notes separate from H5P params. Use [Moodle handoff](references/moodle-handoff.md) for destination checks.

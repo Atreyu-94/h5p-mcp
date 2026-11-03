@@ -38,6 +38,10 @@ for(const modern of [false,true]) {
   const found=await client.callTool({name:'search_h5p_types',arguments:{installed_only:true}});
   assert(Array.isArray(found.structuredContent.activities),JSON.stringify(found));
   if(libraries&&modern) {
+   const broken={title:'Math',library:'H5P.TrueFalse 1.8',params:{question:'\\(x',correct:'true'}};
+   const mathFailure=(await client.callTool({name:'prepare_h5p_activity',arguments:broken})).structuredContent;
+   assert.equal(mathFailure.diagnostics[0].code,'MATH_DELIMITER_INVALID');
+   assert.equal(mathFailure.diagnostics[0].pointer,'/params/question');
    for(const type of ['true-false','multiple-choice','accordion','question-set']) {
     const example=JSON.parse((await client.readResource({uri:'skill://h5p-authoring/examples/'+type+'.json'})).contents[0].text);
     const prepared=await client.callTool({name:'prepare_h5p_activity',arguments:example});
