@@ -4,7 +4,7 @@ import path from 'node:path';
 import {Objects,storageError} from './objects.js';
 import {load} from '../infrastructure/runtime.js';
 import {isolated} from '../infrastructure/worker.js';
-export async function upload(store:Objects,kind:'asset'|'package',mime:string,input:AsyncIterable<Uint8Array>,ttl:number,callerSignal?:AbortSignal) {
+export async function upload(store:Objects,kind:'asset'|'package',mime:string,input:AsyncIterable<Uint8Array>,ttl:number,callerSignal?:AbortSignal,figureSource?:string) {
  if(kind==='package'?mime!=='application/zip':!uploadExtension(mime)) throw storageError('MIME_MISMATCH');
  return store.publish(kind,ttl,async(stage,_final,signal)=>{
   const file=await fs.open(path.join(stage,'payload'),'wx');let size=0;let header=Buffer.alloc(0);
@@ -23,6 +23,10 @@ export async function upload(store:Objects,kind:'asset'|'package',mime:string,in
   const types=load('magic-bytes.js').filetypeinfo(header).map((v:{mime:string})=>v.mime);
   if(!size||!matchesMediaBytes(mime,types,header)) throw storageError('MIME_MISMATCH');
   if(kind==='package')await isolated({action:'inspect-archive',path:path.join(stage,'payload'),data_dir:stage},signal);
+  if(figureSource!==undefined){
+   if(kind!=='asset'||mime!=='image/png'||Buffer.byteLength(figureSource)>65536)throw storageError('INVALID_PARAMETER');
+   await fs.writeFile(path.join(stage,'figure.typ'),figureSource,{flag:'wx'});
+  }
   return {mime};
  },{signal:callerSignal});
 }

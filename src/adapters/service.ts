@@ -62,6 +62,14 @@ export class Service {
   return result;
  }
  async readResource(uri:string):Promise<Native> {
+  if(uri.startsWith('h5p-figure://source/')){
+   const id=uri.slice('h5p-figure://source/'.length),vault=await this.vault();
+   const asset=await vault.objects.get(id,'asset'),file=asset.files['figure.typ'];
+   if(!file)throw failure('OBJECT_NOT_FOUND');
+   if(file.size>Math.min(65536,limit('RESOURCE_BYTES',16777216)))throw failure('LIMIT_EXCEEDED');
+   const bytes=await vault.objects.read(id,'asset','figure.typ');
+   return {contents:[{uri,mimeType:'text/plain',text:bytes.toString('utf8')}]};
+  }
   if(uri.startsWith('h5p-figure://asset/')){
    const id=uri.slice('h5p-figure://asset/'.length),vault=await this.vault();
    const asset=await vault.objects.get(id,'asset');
@@ -147,8 +155,9 @@ export class Service {
      ?await (await import('../infrastructure/typst-sandbox.js')).renderTypstFigure(args,directory,signal)
      :await renderForceSpec(args,directory,signal);
     try{
-     const asset=await (await this.vault()).upload('asset','image/png',createReadStream(path.join(directory,'figure.png')),86400000,signal);
+     const asset=await (await this.vault()).upload('asset','image/png',createReadStream(path.join(directory,'figure.png')),86400000,signal,name==='render_typst_figure'?args.source:undefined);
      return {ok:true,directory,manifest:figure.manifest,asset_id:asset.id,
+      ...(asset.files['figure.typ']?{source:{uri:'h5p-figure://source/'+asset.id,mime_type:'text/plain',sha256:asset.files['figure.typ'].sha256}}:{}),
       preview:{uri:'h5p-figure://asset/'+asset.id,mime_type:'image/png',sha256:asset.files.payload.sha256}};
     }catch(error){
      for(const name of [...Object.keys(figure.manifest.hashes),'manifest.json'])await fs.unlink(path.join(directory,name));

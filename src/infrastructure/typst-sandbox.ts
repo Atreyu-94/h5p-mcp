@@ -12,6 +12,16 @@ export const sandboxImage='ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142
 const unavailable=(message:string)=>Object.assign(new Error(message),{code:'RENDERER_UNAVAILABLE'});
 const endpoint=process.platform==='win32'?'npipe:////./pipe/dockerDesktopLinuxEngine':'unix:///var/run/docker.sock';
 
+/** Pre-policy-field bundles used the same pinned compiler, fonts, packages and render settings. */
+export function checkFigureProject(manifest:Native) {
+ if(manifest?.version!==1||manifest.imageDigest!==sandboxImage||
+    (manifest.renderPolicy!==undefined&&manifest.renderPolicy!=='offline-single-page-v1')||
+    manifest.fonts!=='embedded'||manifest.ppi!==pixelsPerInch||
+    !manifest.packages||Object.keys(manifest.packages).length!==Object.keys(profile).length||
+    Object.entries(profile).some(([name,digest])=>manifest.packages[name]!==digest))
+  throw new Error('Unsupported figure project or renderer policy.');
+}
+
 function docker(args:string[],signal?:AbortSignal,maxStdout=65536) {
  return runFigureProcess('docker',['--host',endpoint,...args],signal,{maxStdout,timeoutMs:20000});
 }
@@ -82,7 +92,7 @@ export async function renderTypstFigure(input:Native,output:string,signal?:Abort
   await fs.writeFile(path.join(root,'figure.typ'),source,{mode:0o644});
   const page=await renderSinglePage(format=>compile(root,packages,format,signal));
   const files={'figure.typ':source,'figure.svg':page.svg,'figure.png':page.png};
-  const manifest={version:1,compiler:'Typst 0.15.1',imageDigest:sandboxImage,packages:profile,fonts:'embedded',ppi:pixelsPerInch,
+  const manifest={version:1,renderPolicy:'offline-single-page-v1',compiler:'Typst 0.15.1',imageDigest:sandboxImage,packages:profile,fonts:'embedded',ppi:pixelsPerInch,
    image:{path:'figure.png',mime:'image/png',width:page.pngWidth,height:page.pngHeight,alt:input.alt},
    master:{path:'figure.svg',mime:'image/svg+xml',width:page.widthPt,height:page.heightPt,unit:'pt'},
    hashes:Object.fromEntries(Object.entries(files).map(([file,bytes])=>[file,sha(bytes)]))};

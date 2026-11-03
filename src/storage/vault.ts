@@ -32,7 +32,7 @@ export function compatibility(dependencies:Native,lock:Native,target:Target|unde
 export class Vault {
  private pool=new Pool(2,8);
  constructor(readonly objects:Objects,readonly source:string,readonly engine=new Engine()){}
- upload(kind:'asset'|'package',mime:string,input:AsyncIterable<Uint8Array>,ttl=day,signal?:AbortSignal){return upload(this.objects,kind,mime,input,ttl,signal);}
+ upload(kind:'asset'|'package',mime:string,input:AsyncIterable<Uint8Array>,ttl=day,signal?:AbortSignal,figureSource?:string){return upload(this.objects,kind,mime,input,ttl,signal,figureSource);}
  async snapshot(fresh=false,signal=AbortSignal.timeout(300000)):Promise<Stored> {
   const active=this.objects.active('libraries');if(active&&!fresh)return this.objects.get(active,'libraries');
   const generations=new Generations();

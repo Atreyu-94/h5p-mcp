@@ -18,6 +18,9 @@ try{
   const reply=await client.callTool({name:'render_typst_figure',arguments:{source,alt}});
   assert(reply.structuredContent?.ok,JSON.stringify(reply.content));
   const {directory,preview,manifest}=reply.structuredContent;
+  const editable=await client.readResource({uri:reply.structuredContent.source.uri});
+  assert.equal(editable.contents[0].mimeType,'text/plain');
+  assert.equal(editable.contents[0].text,source);
   const image=await client.readResource({uri:preview.uri});
   assert.deepEqual(Buffer.from(image.contents[0].blob,'base64'),await fs.readFile(path.join(directory,'figure.png')));
   assert.equal(await fs.readFile(path.join(directory,'figure.typ'),'utf8'),source);

@@ -60,6 +60,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun test tests/core/typst-sandbox.test.ts
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          bun test tests/core/compiler.test.ts -t 'portable figure project'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/tooling/typst-source-probe.mjs (Get-Command bun).Source dist/core/cli.js (Join-Path $env:RUNNER_TEMP 'typst-source-figures')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Exercise optional managed Typst and local MCP on this host

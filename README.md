@@ -98,6 +98,23 @@ a 256 MiB memory limit with no extra swap, one CPU and a 64-process limit.
 Rendering requires an available local engine with these limits. The image is
 never pulled during a request. Source rendering is unavailable over HTTP.
 
+The general tool also returns a text resource at `source.uri` scoped to the same
+owner and expiration as the PNG. Copy the local figure directory for durable
+editing. To capture a figure with an activity, use the asset key from its JSON
+source and the directory returned by the renderer:
+
+```sh
+h5p-mcp freeze activity.json lesson --figure curve /path/to/figure-directory
+h5p-mcp rebuild lesson lesson-copy.h5p
+```
+
+Freeze verifies the matching PNG and copies the generating files to
+`lesson/figures/curve/`. The exact H5P rebuild uses the captured PNG and works
+without Typst. For a revision, edit a copy of the figure directory, then run
+`h5p-mcp figure rebuild /path/to/edited-copy /path/to/new-figure` with the
+offline renderer enabled. Point the activity's asset at the new PNG and freeze
+a new project. The reader supports both v1 and v2. Exact reconstruction in either format requires the backend recorded in the project lock.
+
 ## Workflow
 
 HTTP is opt-in: `h5p-mcp http <host-config.json>`. It requires configured OIDC

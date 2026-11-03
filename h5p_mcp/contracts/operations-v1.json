@@ -60,6 +60,14 @@
           "minLength": 1,
           "maxLength": 128
         },
+        "source": {
+          "type": "object", "additionalProperties": false, "required": ["uri", "mime_type", "sha256"],
+          "properties": {
+            "uri": {"type": "string", "pattern": "^h5p-figure://source/[a-f0-9]{32}$"},
+            "mime_type": {"const": "text/plain"},
+            "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
         "preview": {
           "type": "object",
           "additionalProperties": false,

@@ -10,7 +10,7 @@ import type {Native} from '../domain/types.js';
 const hash=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 const failure=(code:string)=>Object.assign(new Error(code),{code});
 /** Portable source unit, outside the TTL object store. Library lock retains snapshot v1. */
-export async function freezeSource(source:Native,vault:Vault,directory:string,authorize:(filename:string)=>Promise<string>) {
+export async function freezeSource(source:Native,vault:Vault,directory:string,authorize:(filename:string)=>Promise<string>,figures:Record<string,string>={}) {
  if(await fs.lstat(directory).then(()=>true,error=>{if(error.code==='ENOENT')return false;throw error;}))throw failure('OUTPUT_ALREADY_EXISTS');
  checkTree(source);
  if(source?.assets&&typeof source.assets==='object')for(const filename of Object.values(source.assets))if(typeof filename==='string')await authorize(filename);
@@ -33,6 +33,27 @@ export async function freezeSource(source:Native,vault:Vault,directory:string,au
   const extension=path.extname(filename);if(!/^\.[a-zA-Z0-9]{1,10}$/.test(extension))throw failure('INVALID_PARAMETER');
   const relative='assets/'+id+extension;await put(relative,data);normalized.assets[id]=relative;
  }
+ // A captured figure is associated with its activity asset by the actual PNG digest.
+ for(const [id,dirname] of Object.entries(figures)){
+  if(!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(id)||!Object.hasOwn(manifest.assets,id))throw failure('INVALID_PARAMETER');
+  const root=await fs.realpath(await authorize(dirname));
+  const read=async(name:string,max:number)=>{
+   const real=await fs.realpath(await authorize(path.join(root,name)));
+   if(path.dirname(real)!==root)throw failure('PERMISSION_DENIED');
+   return readBounded(real,max);
+  };
+  const data=await read('manifest.json',65536);
+  const figure=JSON.parse(data.toString('utf8'));
+  const {checkFigureProject}=await import('../infrastructure/typst-sandbox.js');
+  checkFigureProject(figure);
+  if(figure.hashes?.['figure.png']!==manifest.assets[id])throw failure('STALE_PREPARATION');
+  for(const [name,max] of [['figure.typ',65536],['figure.svg',4194304],['figure.png',4194304]] as const){
+   const bytes=await read(name,max);
+   if(hash(bytes)!==figure.hashes[name])throw failure('OBJECT_INTEGRITY_FAILED');
+   await put('figures/'+id+'/'+name,bytes);
+  }
+  await put('figures/'+id+'/manifest.json',data);
+ }
  const selected=snapshot.metadata.lock.libraries.filter((item:Native)=>Object.hasOwn(manifest.libraries,`${item.machine_name} ${item.major}.${item.minor}`));
  for(const item of selected){
   const folder=`${item.machine_name}-${item.major}.${item.minor}`;
@@ -45,17 +66,31 @@ export async function freezeSource(source:Native,vault:Vault,directory:string,au
  await put('source.json',Buffer.from(JSON.stringify(normalized,null,2)+'\n'));
  const libraryLock={...snapshot.metadata.lock,libraries:selected};
  await put('libraries.lock.json',Buffer.from(JSON.stringify(libraryLock,null,2)+'\n'));
- const lock={version:1,schema_version:'1',compiler:'authoring-v1',markdown:'bounded-markdown-v1',preparation:manifest,files};
+ const version=Object.keys(figures).length?2:1;
+ const lock={version,...(version===2?{figure_assets:Object.keys(figures)}:{}),schema_version:'1',compiler:'authoring-v1',markdown:'bounded-markdown-v1',preparation:manifest,files};
  await fs.writeFile(path.join(directory,'project.lock.json'),JSON.stringify(lock,null,2)+'\n',{flag:'wx'});
- return {ok:true,format:'h5p-source-project-v1',files:Object.keys(files).length,bytes,verification:{reconstruction:'captured',playback:'not_run'}};
+ return {ok:true,format:'h5p-source-project-v'+version,files:Object.keys(files).length,bytes,verification:{reconstruction:'captured',playback:'not_run'}};
 }
 export async function rebuildSource(directory:string) {
  const root=await fs.realpath(directory),lock=JSON.parse((await readBounded(path.join(root,'project.lock.json'),16777216)).toString('utf8'));checkTree(lock);
- if(lock.version!==1||lock.schema_version!=='1'||lock.compiler!=='authoring-v1'||lock.markdown!=='bounded-markdown-v1'||!lock.files||!lock.files['source.json']||!lock.files['libraries.lock.json'])throw failure('OBJECT_INTEGRITY_FAILED');
+ if(![1,2].includes(lock.version)||lock.schema_version!=='1'||lock.compiler!=='authoring-v1'||lock.markdown!=='bounded-markdown-v1'||!lock.files||!lock.files['source.json']||!lock.files['libraries.lock.json'])throw failure('OBJECT_INTEGRITY_FAILED');
+ const figureFiles=new Set<string>();
+ if(lock.version===2){
+  if(!Array.isArray(lock.figure_assets)||!lock.figure_assets.length)throw failure('OBJECT_INTEGRITY_FAILED');
+  for(const id of lock.figure_assets){
+   if(typeof id!=='string'||!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(id)||!Object.hasOwn(lock.preparation?.assets||{},id))throw failure('OBJECT_INTEGRITY_FAILED');
+   for(const file of ['figure.typ','figure.svg','figure.png','manifest.json']){
+    const relative='figures/'+id+'/'+file;
+    if(!lock.files[relative]||figureFiles.has(relative))throw failure('OBJECT_INTEGRITY_FAILED');
+    figureFiles.add(relative);
+   }
+   if(lock.files['figures/'+id+'/figure.png'].sha256!==lock.preparation.assets[id])throw failure('OBJECT_INTEGRITY_FAILED');
+  }
+ }
  const entries=Object.entries(lock.files) as Array<[string,Native]>;
  if(entries.length>20000)throw failure('LIMIT_EXCEEDED');let total=0;
  for(const [relative,record] of entries){
-  if(!/^(source\.json|libraries\.lock\.json|assets\/[A-Za-z0-9_.-]+|data\/libraries\/[A-Za-z0-9_.-]+\/.+)$/.test(relative)||relative.includes('\\')||relative.split('/').some(part=>part==='.'||part==='..')||!Number.isSafeInteger(record.size)||record.size<0||record.size>134217728||!/^[a-f0-9]{64}$/.test(record.sha256))throw failure('OBJECT_INTEGRITY_FAILED');
+  if((!figureFiles.has(relative)&&!/^(source\.json|libraries\.lock\.json|assets\/[A-Za-z0-9_.-]+|data\/libraries\/[A-Za-z0-9_.-]+\/.+)$/.test(relative))||relative.includes('\\')||relative.split('/').some(part=>part==='.'||part==='..')||!Number.isSafeInteger(record.size)||record.size<0||record.size>134217728||!/^[a-f0-9]{64}$/.test(record.sha256))throw failure('OBJECT_INTEGRITY_FAILED');
   total+=record.size;if(total>536870912)throw failure('LIMIT_EXCEEDED');
   const filename=await fs.realpath(path.join(root,relative)),rel=path.relative(root,filename);
   if(rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))throw failure('OBJECT_INTEGRITY_FAILED');
