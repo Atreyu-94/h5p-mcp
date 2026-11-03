@@ -1,3 +1,4 @@
+import {svgMime,svgBytes,validateStaticSvg} from '../domain/static-svg.js';
 import {uploadExtension,matchesMediaBytes} from '../domain/media-formats.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -15,13 +16,14 @@ export async function upload(store:Objects,kind:'asset'|'package',mime:string,in
    while(true) {
     const item=await Promise.race([iterator.next(),cancelled]);if(item.done)break;
     const chunk=Buffer.from(item.value);size+=chunk.length;
-    if(size>Math.min(store.budgets.bytes,kind==='asset'?67108864:134217728)) throw storageError('LIMIT_EXCEEDED');
+    if(size>Math.min(store.budgets.bytes,mime===svgMime?svgBytes:kind==='asset'?67108864:134217728)) throw storageError('LIMIT_EXCEEDED');
     if(header.length<4096)header=Buffer.concat([header,chunk.subarray(0,4096-header.length)]);
     await file.writeFile(chunk);signal.throwIfAborted();
    }
   }finally{signal.removeEventListener('abort',abort);void iterator.return?.().catch(()=>{});await file.close();}
   const types=load('magic-bytes.js').filetypeinfo(header).map((v:{mime:string})=>v.mime);
-  if(!size||!matchesMediaBytes(mime,types,header)) throw storageError('MIME_MISMATCH');
+  if(mime===svgMime)validateStaticSvg(await fs.readFile(path.join(stage,'payload')));
+  else if(!size||!matchesMediaBytes(mime,types,header)) throw storageError('MIME_MISMATCH');
   if(kind==='package')await isolated({action:'inspect-archive',path:path.join(stage,'payload'),data_dir:stage},signal);
   if(figureSource!==undefined){
    if(kind!=='asset'||mime!=='image/png'||Buffer.byteLength(figureSource)>65536)throw storageError('INVALID_PARAMETER');

@@ -40,8 +40,10 @@ export async function nativeManifest(root: string, activity: Activity, mathemati
   const backend: Record<string,string> = {};
   for(const name of ['authoring-v1.json','authoring-adapters-v1.json'])backend['contract/'+name]=hash(await fs.readFile(path.join(repositoryRoot,'h5p_mcp/contracts',name)));
   const load=createRequire(import.meta.url);
-  for(const name of ['sanitize-html','magic-bytes.js','yazl','yauzl-promise','@node-rs/crc32','probe-image-size','ajv','yaml'])
+  for(const name of ['sanitize-html','magic-bytes.js','yazl','yauzl-promise','@node-rs/crc32','probe-image-size','ajv','yaml','saxes'])
     backend['package/'+name]=hash(await fs.readFile(load.resolve(name+'/package.json')));
+  const saxDependencies=createRequire(load.resolve('saxes/package.json'));
+  backend['package/xmlchars']=hash(await fs.readFile(saxDependencies.resolve('xmlchars/package.json')));
   // re2js exports its entry point, but not its package.json subpath.
   backend['package/re2js']=hash(await fs.readFile(path.resolve(path.dirname(load.resolve('re2js')),'../package.json')));
   // Ported rules have their own provenance; legacy manifests cannot hide a core change.

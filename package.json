@@ -33,6 +33,7 @@
     "probe-image-size": "7.4.0",
     "re2js": "2.9.1",
     "sanitize-html": "2.18.1",
+    "saxes": "6.0.0",
     "yaml": "2.9.1",
     "yauzl-promise": "4.0.0",
     "yazl": "3.3.1"

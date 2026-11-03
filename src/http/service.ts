@@ -62,7 +62,7 @@ export class Remote extends Service {
  override async readResource(uri:string) {
   this.require('h5p:read');
   if(uri.startsWith('h5p-schema://stored/'))return {contents:[{uri,mimeType:'application/json',text:(await (await this.vault()).objects.read(uri.slice('h5p-schema://stored/'.length),'schema')).toString('utf8')}]};
-  if(!uri.startsWith('h5p-artifact://stored/')&&!this.resources.texts.has(uri))throw failure('OBJECT_NOT_FOUND');
+  if(!uri.startsWith('h5p-artifact://stored/')&&!uri.startsWith('h5p-figure://svg/')&&!this.resources.texts.has(uri))throw failure('OBJECT_NOT_FOUND');
   return super.readResource(uri);
  }
  async upload(kind:'asset'|'package',mime:string,body:AsyncIterable<Uint8Array>,signal:AbortSignal) {

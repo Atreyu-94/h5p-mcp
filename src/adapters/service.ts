@@ -1,3 +1,4 @@
+import {svgMime,svgBytes,validateStaticSvg} from '../domain/static-svg.js';
 import {randomUUID} from 'node:crypto';
 import {Pool} from '../infrastructure/pool.js';
 import {feedback} from './feedback.js';
@@ -58,10 +59,18 @@ export class Service {
   if(value.metadata.library_snapshot_id)result.library_snapshot_id=value.metadata.library_snapshot_id;
   if(value.files.payload)Object.assign(result,{mime_type:value.metadata.mime,size:value.files.payload.size,sha256:value.files.payload.sha256});
   if(value.metadata.feedback)Object.assign(result,value.metadata.feedback);
+  if(value.kind==='asset'&&value.metadata.mime===svgMime)result.uri='h5p-figure://svg/'+value.id;
   if(value.kind==='artifact')Object.assign(result,{uri:'h5p-artifact://stored/'+value.id,target:value.metadata.target,verification:verification({structure:'passed',semantics:'passed'})});
   return result;
  }
  async readResource(uri:string):Promise<Native> {
+  if(uri.startsWith('h5p-figure://svg/')){
+   const id=uri.slice('h5p-figure://svg/'.length),vault=await this.vault(),asset=await vault.objects.get(id,'asset');
+   if(asset.metadata.mime!==svgMime)throw failure('MIME_MISMATCH');
+   if(asset.files.payload.size>Math.min(svgBytes,limit('RESOURCE_BYTES',16777216)))throw failure('LIMIT_EXCEEDED');
+   const bytes=await vault.objects.read(id,'asset');validateStaticSvg(bytes);
+   return {contents:[{uri,mimeType:svgMime,blob:bytes.toString('base64')}]};
+  }
   if(uri.startsWith('h5p-figure://source/')){
    const id=uri.slice('h5p-figure://source/'.length),vault=await this.vault();
    const asset=await vault.objects.get(id,'asset'),file=asset.files['figure.typ'];
@@ -179,7 +188,7 @@ export class Service {
    if(name==='revoke_stored_h5p_object'){await vault.objects.revoke(args.object_id);return {revoked:true};}
    if(name==='capture_h5p_library_snapshot')return this.stored(await vault.snapshot(true,signal));
    if(name==='activate_h5p_library_snapshot'){await vault.objects.activate('libraries',args.object_id);return this.stored(await vault.objects.get(args.object_id,'libraries'));}
-   if(name==='validate_stored_h5p_package'){return this.packageReport(await vault.validate(args.object_id,signal),args.target_profile_id);}
+   if(name==='validate_stored_h5p_package'){return this.packageReport(await vault.validate(args.object_id,signal,args.target_profile_id),args.target_profile_id);}
   }
   if(name==='search_h5p_types'||name==='refresh_h5p_catalog') return this.run('discover',{query:'',installed_only:false,offset:0,limit:20,...args,refresh:name==='refresh_h5p_catalog'},signal);
   if(name==='get_h5p_type_contract'||name==='install_h5p_library') {
@@ -211,7 +220,7 @@ export class Service {
   }
   if(name==='validate_h5p_package') {
    const filename=await this.authorize(args.path,'PACKAGE');
-   return this.packageReport(await this.run('validate',{path:filename},signal),args.target_profile_id);
+   return this.packageReport(await this.run('validate',{path:filename,allow_svg_content:args.target_profile_id?await (await this.vault()).permitsSvg(args.target_profile_id):false},signal),args.target_profile_id);
   }
   if(name==='export_h5p_activity') {
    const destination=await this.destination(args.output_name);

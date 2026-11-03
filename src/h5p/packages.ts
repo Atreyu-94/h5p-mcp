@@ -13,8 +13,8 @@ import type {Native} from '../domain/types.js';
 const load=createRequire(import.meta.url),fail=(code='SCHEMA_VALIDATION_FAILED')=>Object.assign(new Error(code),{code});
 const hash=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 async function json(filename:string){return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)));}
-export async function unpack(filename:string,work:(root:string)=>Promise<Native>,content=false){
- await preflight(filename,content);const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-package-native-'));
+export async function unpack(filename:string,work:(root:string)=>Promise<Native>,content=false,allowSvgContent?:boolean){
+ await preflight(filename,content,allowSvgContent);const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-package-native-'));
  try{const zip=await load('yauzl-promise').open(filename);try{for await(const entry of zip){const target=path.join(root,entry.filename);if(entry.filename.endsWith('/')){await fs.mkdir(target,{recursive:true});continue;}await fs.mkdir(path.dirname(target),{recursive:true});const file=await fs.open(target,'wx');try{for await(const bytes of await entry.openReadStream())await file.writeFile(bytes);}finally{await file.close();}}}finally{await zip.close();}return await work(root);}catch(error:Native){if(['TARGET_INCOMPATIBLE','LIBRARY_VERSION_MISMATCH','LIMIT_EXCEEDED','UNSAFE_ARCHIVE'].includes(error.code))throw error;throw Object.assign(fail(),{details:error.details});}finally{await fs.rm(root,{recursive:true,force:true});}
 }
 export async function inspectLibraries(root:string){
@@ -74,13 +74,13 @@ function validateMetadata(meta:Native){
   if(!Array.isArray(meta[key])||meta[key].some((item:Native)=>!item||fields.some(field=>typeof item[field]!=='string'||!item[field])))throw fail();
  }
 }
-export async function validatePackage(filename:string,installedLibraries?:string){return unpack(filename,async root=>{
+export async function validatePackage(filename:string,installedLibraries?:string,allowSvgContent=false){return unpack(filename,async root=>{
  const libraries=await inspectLibraries(root),meta=await json(path.join(root,'h5p.json')),params=await json(path.join(root,'content/content.json'));
  validateMetadata(meta);
  const main=meta.preloadedDependencies.find((v:Native)=>v.machineName===meta.mainLibrary);if(!main)throw fail();
  const assets:Record<string,string>={};let index=0;const pending=[params];
  while(pending.length){const value=pending.pop();if(!value||typeof value!=='object')continue;if(typeof value.path==='string'&&!/^https?:\/\//i.test(value.path)){
-  const relative=value.path;if(relative.includes('\\')||relative.split('/').some((p:string)=>!p||p==='..'||p==='.')||path.isAbsolute(relative))throw fail();const file=path.join(root,'content',relative);await fs.access(file);const id='package'+index++;assets[id]=file;value.path='asset:'+id;
+  const relative=value.path;if((value.mime==='image/svg+xml')!==/\.svg$/i.test(relative))throw fail();if(relative.includes('\\')||relative.split('/').some((p:string)=>!p||p==='..'||p==='.')||path.isAbsolute(relative))throw fail();const file=path.join(root,'content',relative);await fs.access(file);const id='package'+index++;assets[id]=file;value.path='asset:'+id;
  }pending.push(...Object.values(value));}
  const activity={title:meta.title,language:meta.language,license:meta.license??'U',library:`${main.machineName} ${main.majorVersion}.${main.minorVersion}`,params,assets};
  if(!params||typeof params!=='object'||Array.isArray(params)||metadataErrors(activity).length)throw fail();
@@ -110,4 +110,4 @@ export async function validatePackage(filename:string,installedLibraries?:string
   for(const lib of required.dynamic)if(!preloaded.has(lib)&&!dynamic.has(lib))throw fail();
  }finally{if(previous===undefined)delete process.env.H5P_MCP_ASSET_ROOTS;else process.env.H5P_MCP_ASSET_ROOTS=previous;}
  return {ok:true,package_mode,required_libraries,missing_local_libraries,errors:[],warnings:[],libraries:libraries.length,engine:'native-package-v1'};
- },true);}
+ },true,allowSvgContent);}

@@ -13,6 +13,7 @@ import {Pool} from '../infrastructure/pool.js';
 import {valid,invalidInput} from '../adapters/contracts.js';
 import type {Native} from '../domain/types.js';
 const day=86400000;
+const hostPermitsSvg=(targetID?:string)=>!!targetID && (process.env.H5P_MCP_SVG_CONTENT_TARGETS||'').split(',').some(id=>id.trim()===targetID);
 export interface Target {core:{major:number;minor:number};inventory_at:string;can_install:boolean;libraries:Array<{machine_name:string;major:number;minor:number;patch:number}>;allowed?:Array<{machine_name:string;major:number;minor:number;patch:number}>}
 export function compatibility(dependencies:Native,lock:Native,target:Target|undefined) {
  if(!target||!Number.isFinite(Date.parse(target.inventory_at)))return {compatible:false,declared_compatible:false,exact_match:false,destination_evidence:'not_run',code:'TARGET_INVENTORY_UNKNOWN',missing:[]};
@@ -98,9 +99,16 @@ export class Vault {
   if(remaining<1)throw storageError('OBJECT_EXPIRED');
   return this.objects.publish('target',remaining,async()=>profile);
  }
+ async permitsSvg(targetID?:string){
+  if(!targetID)return false;
+  await this.objects.get(targetID,'target');
+  return hostPermitsSvg(targetID);
+ }
  async export(preparationID:string,key:string,targetID?:string,ttl=day,callerSignal?:AbortSignal) {
   const inputDigest=digest({operation:'export',preparationID,targetID:targetID||null,ttl});
-  const replay=await this.objects.replay(key,inputDigest,'artifact');if(replay)return replay;
+
+  const replay=await this.objects.replay(key,inputDigest,'artifact');
+  if(replay){if(replay.metadata.svgContent&&!await this.permitsSvg(targetID))throw storageError('TARGET_INCOMPATIBLE');return replay;}
   const prepared=await this.objects.get(preparationID,'preparation');
   const value=JSON.parse((await this.objects.read(preparationID,'preparation','preparation.json')).toString('utf8'));
   if(value.activity?.preparation?.version!==2||value.activity.preparation.engine!=='native-content-v1')throw storageError('STALE_PREPARATION');
@@ -109,15 +117,15 @@ export class Vault {
   const assessment=compatibility(value.activity.preparation.libraries,snapshot.metadata.lock,target);
   if(target&&!assessment.compatible)throw Object.assign(storageError(assessment.code!),{targetMissing:assessment.missing});
   return this.objects.publish('artifact',ttl,async(stage,_final,signal)=>{
-   const result:Native=await this.pool.run(()=>isolated({action:'export',data_dir:path.join(snapshot.root,'data'),activity:value.activity,path:path.join(stage,'payload')},signal,[path.join(prepared.root,'assets')]),signal);
+   const result:Native=await this.pool.run(()=>isolated({action:'export',data_dir:path.join(snapshot.root,'data'),activity:value.activity,allow_svg_content:hostPermitsSvg(targetID),path:path.join(stage,'payload')},signal,[path.join(prepared.root,'assets')]),signal);
    await this.objects.get(prepared.id,'preparation');await this.objects.get(snapshot.id,'libraries');
    if(targetID)await this.objects.get(targetID,'target');
-   return {mime:'application/zip',preparation_id:preparationID,library_snapshot_id:snapshot.id,h5p:result.h5p_json,target:assessment};
+   return {mime:'application/zip',svgContent:result.svg_content,preparation_id:preparationID,library_snapshot_id:snapshot.id,h5p:result.h5p_json,target:result.svg_content?{...assessment,svg_target_profile_id:targetID}:assessment};
   },{key,digest:inputDigest,signal:callerSignal});
  }
- async validate(packageID:string,signal?:AbortSignal) {
+ async validate(packageID:string,signal?:AbortSignal,targetID?:string) {
   const pkg=await this.objects.get(packageID,'package');
-  return this.engine.run({action:'validate',data_dir:this.source,path:path.join(pkg.root,'payload')},signal);
+  return this.engine.run({action:'validate',allow_svg_content:await this.permitsSvg(targetID),data_dir:this.source,path:path.join(pkg.root,'payload')},signal);
  }
  async close(){await this.engine.close();this.objects.close();}
 }

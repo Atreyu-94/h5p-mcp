@@ -268,3 +268,65 @@ test.skipIf(process.env.H5P_TEST_TYPST_DOCKER!=='1')('portable figure project su
   await teacher.close();await other.close();await vault.close();await fs.rm(tmp,{recursive:true,force:true});
  }
 },180000);
+
+test('stored SVG is validated, owner scoped and embedded only for a host-approved target',async()=>{
+ const {Service}=await import('../../src/adapters/service.js');
+ const {validatePackage}=await import('../../src/h5p/packages.js');
+ const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-svg-target-')),store=path.join(tmp,'store');
+ const host=new Service(undefined,{data:tmp,store}),other=new Service({tenant:'local',owner:'other'},{data:tmp,store});
+ const previous=process.env.H5P_MCP_SVG_CONTENT_TARGETS;
+ delete process.env.H5P_MCP_SVG_CONTENT_TARGETS;
+ try{
+  await compilerFixture(tmp);
+  const file=path.join(tmp,'figure.svg');
+  const vector=process.env.H5P_TEST_SVG_FILE?await fs.readFile(process.env.H5P_TEST_SVG_FILE):
+   Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="50pt" height="20pt" viewBox="0 0 50 20"><path d="M1 1L49 19" stroke="#000000"/></svg>');
+  await fs.writeFile(file,vector);
+  const upload=async()=> (await host.call('upload_h5p_asset',{path:file,mime:'image/svg+xml'})).structuredContent;
+  const asset=await upload();expect(asset.kind).toBe('asset');
+  const resource=(await host.readResource(asset.uri)).contents[0];
+  expect(resource.mimeType).toBe('image/svg+xml');expect(Buffer.from(resource.blob,'base64')).toEqual(vector);
+  await expect(other.readResource(asset.uri)).rejects.toMatchObject({code:'OBJECT_NOT_FOUND'});
+  await fs.writeFile(file,vector.toString().replace('</svg>','<script/></svg>'));
+  expect((await upload()).ok).toBe(false);
+  await fs.writeFile(file,vector);
+  const vault=await host.vault();
+  const source:Native={...multiChoice(),image:{id:'curve',asset:'curve',mime:'image/svg+xml',alt:'Curve',copyright:{author:'Teacher',license:'CC BY'},library:pin('H5P.Image 1.1')},assets:{curve:asset.object_id}};
+  if(process.env.H5P_TEST_SVG_FILE){
+   const example=JSON.parse(await fs.readFile(new URL('../../examples/scientific-figures/motion-question.json',import.meta.url),'utf8'));
+   Object.assign(source,example,{image:{...example.image,mime:'image/svg+xml'},assets:{grafica:asset.object_id}});
+  }
+  const prepared=await vault.prepare(source,86400000,undefined,undefined,true);
+  const profile=await vault.target({core:{major:1,minor:28},inventory_at:new Date().toISOString(),can_install:true,libraries:[]});
+  await expect(vault.export(prepared.id,'no-target')).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+  await expect(vault.export(prepared.id,'default',profile.id)).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+  process.env.H5P_MCP_SVG_CONTENT_TARGETS=profile.id;
+  const artifact=await vault.export(prepared.id,'vector',profile.id),filename=path.join(artifact.root,'payload');
+  expect(artifact.metadata.target.svg_target_profile_id).toBe(profile.id);
+  const libraries=path.join(tmp,'libraries');
+  await expect(validatePackage(filename,libraries)).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+  expect((await validatePackage(filename,libraries,true)).ok).toBe(true);
+  const imported=await vault.upload('package','application/zip',(await import('node:fs')).createReadStream(filename));
+  const validate=async(target?:string)=>(await host.call('validate_stored_h5p_package',{object_id:imported.id,...(target?{target_profile_id:target}:{})})).structuredContent;
+  expect((await validate()).ok).toBe(false);
+  expect((await validate(profile.id)).ok).toBe(true);
+  const zip=await createRequire(import.meta.url)('yauzl-promise').open(filename);
+  try{
+   const expected='media/'+asset.sha256+'.svg';let embedded=false,routed=false;
+   for await(const entry of zip){
+    if(!['content/content.json','content/'+expected].includes(entry.filename))continue;
+    const bufs=[];for await(const chunk of await entry.openReadStream())bufs.push(chunk);
+    const bytes=Buffer.concat(bufs);
+    if(entry.filename==='content/'+expected){expect(bytes).toEqual(vector);embedded=true;}
+    else{expect(JSON.parse(bytes.toString()).media.type.params.file).toMatchObject({path:expected,mime:'image/svg+xml'});routed=true;}
+   }
+   expect(embedded&&routed).toBe(true);
+  }finally{await zip.close();}
+  if(process.env.H5P_TEST_SVG_EXPORT)await fs.copyFile(filename,process.env.H5P_TEST_SVG_EXPORT);
+  delete process.env.H5P_MCP_SVG_CONTENT_TARGETS;
+  await expect(vault.export(prepared.id,'vector',profile.id)).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+ }finally{
+  if(previous===undefined)delete process.env.H5P_MCP_SVG_CONTENT_TARGETS;else process.env.H5P_MCP_SVG_CONTENT_TARGETS=previous;
+  await host.close();await other.close();await fs.rm(tmp,{recursive:true,force:true});
+ }
+},120000);

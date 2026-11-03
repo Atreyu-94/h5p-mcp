@@ -1,3 +1,4 @@
+import {validateStaticSvg} from '../domain/static-svg.js';
 import path from 'node:path';
 import {runFigureProcess} from './typst-process.js';
 import {load} from './runtime.js';
@@ -23,16 +24,13 @@ export async function compileSinglePage(executable:string,root:string,packages:s
 
 export async function renderSinglePage(compile:(format:'svg'|'png')=>Promise<Buffer>) {
  const svg=await compile('svg');
- const probe=load('probe-image-size').sync;
- const vector=probe(svg);
- if(vector?.type!=='svg'||vector.wUnits!=='pt'||vector.hUnits!=='pt'||
-    !Number.isFinite(vector.width+vector.height)||vector.width<=0||vector.height<=0)
-  throw invalid('Invalid SVG dimensions.');
+ const vector=validateStaticSvg(svg);
+ if(vector.wUnits!=='pt'||vector.hUnits!=='pt')throw invalid('Invalid Typst SVG dimension units.');
  const maxWidth=Math.ceil(vector.width*pixelsPerInch/72);
  const maxHeight=Math.ceil(vector.height*pixelsPerInch/72);
  if(maxWidth*maxHeight>pixelLimit)throw invalid('Page exceeds the PNG pixel budget.','LIMIT_EXCEEDED');
  const png=await compile('png');
- const raster=probe(png);
+ const raster=load('probe-image-size').sync(png);
  if(raster?.type!=='png'||raster.width<=0||raster.height<=0||raster.width*raster.height>pixelLimit)
   throw invalid('Invalid PNG dimensions.');
  return {svg,png,widthPt:vector.width,heightPt:vector.height,pngWidth:raster.width,pngHeight:raster.height};

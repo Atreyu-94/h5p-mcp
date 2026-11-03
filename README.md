@@ -82,7 +82,7 @@ For AI-authored diagrams, enable the local stdio tool `render_typst_figure` with
 `H5P_MCP_TYPST_PACKAGES` directory from figure setup. Supply `source` (one
 editable Typst document, up to 64 KiB) and `alt`. Use built-ins or the pinned scientific packages. For drawings use
 `@preview/cetz:0.5.3`, for data plots `@preview/lilaq:0.6.0`, for chemical notation `@preview/chemformula:0.1.3` and for molecular structures `@preview/typed-smiles:0.13.0`. To upgrade an existing CeTZ-only installation, run `figure setup` into a new directory and point `H5P_MCP_TYPST_PACKAGES` there. Rebuilding a saved figure uses its recorded profile. The bundle contains the original source, SVG master
-and PNG. Only the raster is served as an MCP preview or embedded in H5P.
+and PNG. The renderer returns a PNG preview and the default H5P uses that raster.
 
 Prepare a local Linux Docker Engine and explicitly pull the pinned official
 compiler once:
@@ -116,6 +116,28 @@ offline renderer enabled. Point the activity's asset at the new PNG and freeze
 a new project. The reader supports both v1 and v2. Exact reconstruction in either format requires the backend recorded in the project lock.
 
 See the [scientific figure examples](examples/scientific-figures/README.md) for editable source and Spanish prompts, visible data alternatives and feedback.
+
+### Embedding a static SVG for a verified destination
+
+Regular figure rendering still returns a PNG asset for default H5P Core. Both
+master generation and SVG uploads validate a bounded static path/glyph subset.
+The policy checks namespaces, geometry, paths and internal references. It rejects
+scripts, foreign elements, stylesheets, external resources and embedded rasters.
+
+To require a vector for a specific destination:
+
+1. Register its library inventory with `register_h5p_target_profile`. The host
+   operator verifies SVG **content** import and playback at that destination
+   and lists its exact returned profile ID in `H5P_MCP_SVG_CONTENT_TARGETS`
+   (comma-separated IDs in the MCP server environment). A new profile needs
+   its own approval. This setting affects only the MCP.
+2. Upload the master file with `upload_h5p_asset`, MIME `image/svg+xml`.
+   The immutable owner-scoped asset can be read through the returned SVG URI.
+3. In the activity image, use the SVG asset ID and `image/svg+xml`.
+   Prepare through `prepare_stored_h5p_source` or `prepare_stored_h5p_activity`.
+   Pass the approved `target_profile_id` to `export_prepared_h5p_activity`
+   and to `validate_stored_h5p_package`. A missing or unapproved target rejects
+   vector export. For an ordinary destination use the renderer's PNG asset.
 
 ## Workflow
 

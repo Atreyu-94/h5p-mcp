@@ -5,6 +5,17 @@ module.exports=async function checkMotion(mode,page,frame){
   if(mode==='narrow')await page.setViewportSize({width:360,height:800});
   const picture=frame.getByRole('img',{name:/Gráfica de posición frente al tiempo/});
   await picture.evaluate(img=>img.decode());
+  if(process.env.H5P_FIGURE_EXPECT_SVG==='1'){
+    const source=await picture.evaluate(img=>img.currentSrc);
+    const url=new URL(source);
+    assert.equal(url.origin,new URL(page.url()).origin);
+    assert.match(url.pathname,/\/content\/media\/[a-f0-9]{64}\.svg$/);
+    const response=await page.request.get(source);
+    assert.equal(response.headers()['content-type'].split(';')[0],'image/svg+xml');
+    const digest=require('node:crypto').createHash('sha256').update(await response.body()).digest('hex');
+    assert(url.pathname.endsWith('/'+digest+'.svg'));
+    console.log(JSON.stringify({decodedSvg:true,sha256:digest}));
+  }
   await frame.getByText(/Tiempo en segundos y posición en metros/).waitFor({state:'visible'});
   const geometry=await page.evaluate(()=>({dpr:devicePixelRatio,inner:innerWidth,outer:outerWidth}));
   if(mode==='zoom'){assert(geometry.inner<geometry.outer*0.55);assert(geometry.dpr>=2);}

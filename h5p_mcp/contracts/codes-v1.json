@@ -83,8 +83,8 @@
     ],
     "TARGET_INCOMPATIBLE": [
       false,
-      "The library is incompatible with the target.",
-      "Select a runnable library compatible with the configured H5P Core."
+      "The destination does not support the requested libraries or content media.",
+      "Check the target library inventory. For SVG content use a host-approved target profile or provide a PNG."
     ],
     "BACKEND_UNAVAILABLE": [
       false,

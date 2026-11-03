@@ -1,3 +1,4 @@
+import {validateStaticSvg,svgBytes} from '../domain/static-svg.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -47,8 +48,9 @@ export async function freezeSource(source:Native,vault:Vault,directory:string,au
   const {checkFigureProject}=await import('../infrastructure/typst-sandbox.js');
   checkFigureProject(figure);
   if(figure.hashes?.['figure.png']!==manifest.assets[id])throw failure('STALE_PREPARATION');
-  for(const [name,max] of [['figure.typ',65536],['figure.svg',4194304],['figure.png',4194304]] as const){
+  for(const [name,max] of [['figure.typ',65536],['figure.svg',svgBytes],['figure.png',4194304]] as const){
    const bytes=await read(name,max);
+   if(name==='figure.svg')validateStaticSvg(bytes);
    if(hash(bytes)!==figure.hashes[name])throw failure('OBJECT_INTEGRITY_FAILED');
    await put('figures/'+id+'/'+name,bytes);
   }
@@ -94,8 +96,11 @@ export async function rebuildSource(directory:string) {
   total+=record.size;if(total>536870912)throw failure('LIMIT_EXCEEDED');
   const filename=await fs.realpath(path.join(root,relative)),rel=path.relative(root,filename);
   if(rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))throw failure('OBJECT_INTEGRITY_FAILED');
+  const isMaster=figureFiles.has(relative)&&relative.endsWith('/figure.svg');
+  if(isMaster&&record.size>svgBytes)throw failure('LIMIT_EXCEEDED');
   const bytes=await readBounded(filename,record.size).catch(()=>{throw failure('OBJECT_INTEGRITY_FAILED');});
   if(bytes.length!==record.size||hash(bytes)!==record.sha256)throw failure('OBJECT_INTEGRITY_FAILED');
+  if(isMaster)validateStaticSvg(bytes);
  }
  const source=JSON.parse((await readBounded(path.join(root,'source.json'),16777216)).toString('utf8'));checkTree(source);
  for(const [id,file] of Object.entries(source.assets||{}) as Array<[string,string]>){

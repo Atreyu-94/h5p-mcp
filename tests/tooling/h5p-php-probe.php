@@ -7,7 +7,7 @@ if (hash_file('sha256', "$coreRoot/h5p.classes.php") !== '6924b5f9559192998db06a
 }
 foreach (['h5p-file-storage.interface.php','h5p-default-storage.class.php','h5p-development.class.php','h5p.classes.php','h5p-metadata.class.php'] as $file) require_once "$coreRoot/$file";
 class ProbeHost {
-  public $package, $directory, $errors = [];
+  public $package, $directory, $errors = [], $allowSvgContent = false;
   public function dispatch($method, $args) {
     switch ($method) {
       case 'getUploadedH5pPath': return $this->package;
@@ -15,7 +15,7 @@ class ProbeHost {
       case 'getOption': return $args[1] ?? null;
       case 'mayUpdateLibraries': return true;
       case 'getLibraryId': case 'libraryHasUpgrade': return false;
-      case 'getWhitelist': return $args[1] . ($args[0] ? ' '.$args[2] : '');
+      case 'getWhitelist': return $args[1] . ($args[0] ? ' '.$args[2] : ($this->allowSvgContent ? ' svg' : ''));
       case 't': return strtr($args[0], $args[1] ?? []);
       case 'setErrorMessage': $this->errors[] = ['message'=>$args[0], 'code'=>$args[1] ?? null]; return;
       case 'setInfoMessage': return;
@@ -46,10 +46,11 @@ $metadata = json_decode($negativeZip->getFromName('h5p.json'), true, 512, JSON_T
 $metadata['preloadedDependencies'][] = ['machineName'=>'H5P.DoesNotExist','majorVersion'=>1,'minorVersion'=>0];
 $negativeZip->addFromString('h5p.json', json_encode($metadata));
 $negativeZip->close();
-$corpus['packages'][] = ['file'=>$negativeFile, 'expected_valid'=>false];
+$corpus['packages'][] = ['file'=>$negativeFile, 'expected_valid'=>false, 'allow_svg_content'=>$corpus['packages'][0]['allow_svg_content'] ?? false];
 $results = [];
 foreach ($corpus['packages'] as $i => $item) {
   $host = new Framework();
+  $host->allowSvgContent = $item['allow_svg_content'] ?? false;
   $host->directory = $output.'/case-'.$i;
   if (file_exists($host->directory)) throw new RuntimeException('Output already exists');
   mkdir($host->directory);
@@ -58,7 +59,7 @@ foreach ($corpus['packages'] as $i => $item) {
   $core = new H5PCore($host, $host->directory, '');
   $validator = new H5PValidator($host, $core);
   $ok = $validator->isValidPackage(false, false);
-  $results[] = ['file'=>basename($item['file']), 'sha256'=>hash_file('sha256',$item['file']), 'ok'=>$ok,'expected_valid'=>$item['expected_valid'] ?? true,'errors'=>$host->errors];
+  $results[] = ['file'=>basename($item['file']), 'sha256'=>hash_file('sha256',$item['file']),'allow_svg_content'=>$host->allowSvgContent, 'ok'=>$ok,'expected_valid'=>$item['expected_valid'] ?? true,'errors'=>$host->errors];
 }
 $report = ['validator'=>'h5p/h5p-php-library','commit'=>'1e21b7a2da4ae9c4f1f9e61f7ae1038f8850fb82','core'=>H5PCore::$coreApi,'php'=>PHP_VERSION,'packages'=>$results,'playback'=>'not_run','grading'=>'not_run'];
 file_put_contents($output.'/report.json', json_encode($report, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));

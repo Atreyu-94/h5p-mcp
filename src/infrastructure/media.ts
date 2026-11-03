@@ -1,3 +1,4 @@
+import {svgBytes,svgMime,validateStaticSvg} from '../domain/static-svg.js';
 import {nativeExtension,matchesMediaBytes} from '../domain/media-formats.js';
 import type {Native, Pointer} from '../domain/types.js';
 import fs from 'node:fs/promises';
@@ -53,11 +54,12 @@ export function createMediaResolver({saveMedia, assets, usedAssets, warnings, fa
       if (stat.size > limit('ASSET_BYTES', 67108864) || mediaBytes > limit('MEDIA_BYTES', 268435456)) throw failure('media byte budget exceeded', 'ASSET_TOO_LARGE');
       usedAssets.add(id);
       if (typeof value.mime !== 'string' || !value.mime) throw failure('media mime is required', 'MIME_MISMATCH');
-      if (!nativeExtension(value.mime)) throw failure('unsupported media MIME; active HTML/SVG assets are not accepted', 'MIME_MISMATCH');
-      const data = await readBounded(real, Math.min(limit('ASSET_BYTES',67108864),limit('MEDIA_BYTES',268435456)-mediaBytes));
+      if (!nativeExtension(value.mime)) throw failure('unsupported media MIME', 'MIME_MISMATCH');
+      const data = await readBounded(real, Math.min(value.mime===svgMime?svgBytes:Infinity,limit('ASSET_BYTES',67108864),limit('MEDIA_BYTES',268435456)-mediaBytes));
       mediaBytes += data.length;
+      if(value.mime===svgMime)validateStaticSvg(data);
       const detected = filetypeinfo(data).map((type: Native)=>type.mime);
-      if (!matchesMediaBytes(value.mime,detected,data.subarray(0,4096)))
+      if (value.mime!==svgMime && !matchesMediaBytes(value.mime,detected,data.subarray(0,4096)))
         throw failure(`declared MIME ${value.mime} does not match detected bytes`, 'MIME_MISMATCH');
       if (saveMedia) {
         // Read a copy: upstream sanitizers/scanners must never mutate the source.
@@ -66,7 +68,7 @@ export function createMediaResolver({saveMedia, assets, usedAssets, warnings, fa
         return { ...value, ...saved };
       }
     } catch (error: Native) {
-      const code = error.code === 'ENOENT' ? 'ASSET_NOT_FOUND' : ['ASSET_TOO_LARGE','MIME_MISMATCH'].includes(error.code) ? error.code : 'INVALID_PARAMETER';
+      const code = error.code === 'ENOENT' ? 'ASSET_NOT_FOUND' : ['ASSET_TOO_LARGE','MIME_MISMATCH','TARGET_INCOMPATIBLE'].includes(error.code) ? error.code : 'INVALID_PARAMETER';
       fail(at, `asset ${id}: ${error.message}`, code);
     }
     return value;
