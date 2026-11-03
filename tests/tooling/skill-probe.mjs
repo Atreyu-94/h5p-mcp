@@ -24,6 +24,10 @@ export async function checkPublishedSkill(client,modern) {
   assert.deepEqual(Buffer.from(contents[0].text),expected.get(item.uri),item.uri);
  }
  if(!modern)return;
+ const tools=await client.request({method:'tools/list',params:{}},shape);
+ assert.equal(tools.cacheScope,'private');assert(tools.ttlMs>0);
+ const guide=await client.request({method:'resources/read',params:{uri}},shape);
+ assert.equal(guide.cacheScope,'public');assert(guide.ttlMs>0);
  const {skills}=await client.request({method:'skills/list',params:{}},shape);
  assert.equal(skills.length,1);
  const [skill]=skills;

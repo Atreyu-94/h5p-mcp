@@ -2,6 +2,7 @@ import {test,expect} from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {Database} from 'bun:sqlite';
 import {Objects,digest} from '../../src/storage/objects.js';
@@ -9,6 +10,23 @@ import {upload} from '../../src/storage/uploads.js';
 import {compatibility} from '../../src/storage/vault.js';
 const principal={tenant:'school-a',owner:'teacher-a'};
 const writer=async(stage:string)=>{await fs.writeFile(path.join(stage,'payload'),'complete');return {mime:'application/zip'};};
+test('schema reads reuse one live object per owner and digest, including concurrent reads',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-schema-'));let now=1000;
+ const a=new Objects(root,principal,()=>now),b=new Objects(root,{...principal,owner:'other'},()=>now);
+ const publish=(store:Objects,text:string)=>store.publish('schema',1000,async stage=>{
+  await fs.writeFile(path.join(stage,'payload'),text);return {mime:'application/json'};
+ },{schemaHash:createHash('sha256').update(text).digest('hex')});
+ try{
+  await a.initialize();await b.initialize();
+  const [one,two]=await Promise.all([publish(a,'one'),publish(a,'one')]);
+  expect(one.id).toBe(two.id);
+  expect((await publish(b,'one')).id).not.toBe(one.id);
+  expect((await publish(a,'two')).id).not.toBe(one.id);
+  await a.revoke(one.id);const renewed=await publish(a,'one');
+  expect(renewed.id).not.toBe(one.id);
+  now+=1001;expect((await publish(a,'one')).id).not.toBe(renewed.id);
+ }finally{a.close();b.close();await fs.rm(root,{recursive:true,force:true});}
+});
 test('tenant and owner isolation, restart, TTL, revocation and integrity',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-objects-'));let now=1000;
  const a=new Objects(root,principal,()=>now),b=new Objects(root,{tenant:'school-b',owner:'teacher-a'},()=>now),c=new Objects(root,{tenant:'school-a',owner:'teacher-b'},()=>now);

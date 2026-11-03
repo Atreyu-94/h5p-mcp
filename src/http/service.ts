@@ -53,8 +53,9 @@ export class Remote extends Service {
   const result=await super.dispatch(name,args,signal);
   if(name==='get_h5p_type_contract') {
    const text=(await this.resources.read(result.raw_schema.uri)).contents[0].text;
-   const snapshot=await (await this.vault()).objects.publish('schema',86400000,async stage=>{await fs.writeFile(path.join(stage,'payload'),text);return {mime:'application/json'};},{signal});
-   result.raw_schema={...result.raw_schema,uri:'h5p-schema://stored/'+snapshot.id,lifetime:'24 hours; owner-bound immutable schema'};
+   const schemaHash=result.raw_schema.sha256;
+   const snapshot=await (await this.vault()).objects.publish('schema',86400000,async stage=>{await fs.writeFile(path.join(stage,'payload'),text);return {mime:'application/json',schemaHash};},{signal,schemaHash});
+   result.raw_schema={...result.raw_schema,uri:'h5p-schema://stored/'+snapshot.id,lifetime:'Until '+new Date(snapshot.expires).toISOString()+'; owner-bound immutable schema'};
   }
   return result;
  }

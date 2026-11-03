@@ -10,7 +10,7 @@ export function mcp(service:Service,shutdown:AbortSignal,pending:Set<Promise<unk
  const server=new Server({name:'h5p-mcp',title:'H5P MCP',version:'0.1.0'},{capabilities:{tools:{},resources:{},extensions:{[extensionID]:{}}}});
  server.setRequestHandler('tools/list',async request=>{
   if(request.params?.cursor!==undefined)throw new ProtocolError(-32602,'Unknown tools cursor');
-  return {tools:service.tools()};
+  return {tools:service.tools(),ttlMs:60000,cacheScope:'private' as const};
  });
  server.setRequestHandler('tools/call',async(request,ctx)=>{
   if(!Object.hasOwn(service.definitions,request.params.name)&&!Object.hasOwn(aliases,request.params.name))throw new ProtocolError(-32602,'Unknown tool');
@@ -23,7 +23,11 @@ export function mcp(service:Service,shutdown:AbortSignal,pending:Set<Promise<unk
   return {resources:[...service.resources.texts.values()].map(({uri,name,mimeType})=>({uri,name,mimeType}))};
  });
  server.setRequestHandler('resources/read',async request=>{
-  try{return await service.readResource(request.params.uri);}catch{throw new ProtocolError(-32602,'Unknown or unavailable resource');}
+  try{
+   const uri=request.params.uri,result=await service.readResource(uri);
+   const packaged=uri.startsWith('skill://h5p-authoring/')||uri.startsWith('h5p-authoring://v1/')||['h5p-contract://v1/schema','h5p-contract://v1/codes','h5p-contract://v1/storage'].includes(uri);
+   return packaged ? {...result,ttlMs:300000,cacheScope:'public'} : result;
+  }catch{throw new ProtocolError(-32602,'Unknown or unavailable resource');}
  });
  const complete=(payload:Native)=>({resultType:'complete',ttlMs:300000,cacheScope:'public',...payload});
  server.setRequestHandler('skills/list',{params},async(value:Native)=>{

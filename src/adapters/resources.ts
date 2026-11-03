@@ -12,27 +12,35 @@ export const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).dige
 export const canonical=(value:Native):Native=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
 export const skillURI='skill://h5p-authoring/SKILL.md';
 export const extensionID='io.modelcontextprotocol/skills';
-export class Resources {
- texts=new Map<string,{uri:string,name:string,mimeType:string,text:string}>();
- artifacts=new Map<string,{filename:string,size:number,sha256:string,content:Native}>();
- snapshots:string[]=[];
- skill:Native;
- async initialize() {
+async function loadSkill() {
+  const texts=new Map<string,{uri:string,name:string,mimeType:string,text:string}>();
   const root=path.join(repositoryRoot,'.agents/skills/h5p-authoring');
   const names:string[]=JSON.parse(await fs.readFile(path.join(root,'resources.json'),'utf8'));
   const resources=[];
   for(const name of names) {
    if(!/^(?:SKILL\.md|resources\.json|references\/[a-z-]+\.md|examples\/[a-z-]+\.json)$/.test(name)) throw new Error('Invalid packaged skill resource');
    const raw=await readBounded(path.join(root,name),262144),uri='skill://h5p-authoring/'+name;
-   this.texts.set(uri,{uri,name,mimeType:name.endsWith('.json')?'application/json':'text/markdown',text:raw.toString('utf8')});
+   texts.set(uri,{uri,name,mimeType:name.endsWith('.json')?'application/json':'text/markdown',text:raw.toString('utf8')});
    resources.push({uri,digest:'sha256:'+hash(raw),size:raw.length});
   }
-  const text=this.texts.get(skillURI)!.text;
+  const text=texts.get(skillURI)!.text;
   const header=/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
   if(!header) throw new Error('Missing packaged skill frontmatter');
   const frontmatter=parseYaml(header[1]);
   if(typeof frontmatter?.name!=='string'||typeof frontmatter.description!=='string') throw new Error('Invalid packaged skill frontmatter');
-  this.skill={uri:skillURI,frontmatter,resources};
+  return {texts,skill:{uri:skillURI,frontmatter,resources}};
+ }
+let packagedSkill:ReturnType<typeof loadSkill>|undefined;
+export class Resources {
+ texts=new Map<string,{uri:string,name:string,mimeType:string,text:string}>();
+ artifacts=new Map<string,{filename:string,size:number,sha256:string,content:Native}>();
+ snapshots:string[]=[];
+ skill:Native;
+ async initialize() {
+  packagedSkill??=loadSkill().catch(error=>{packagedSkill=undefined;throw error;});
+  const {texts,skill}=await packagedSkill;
+  for(const [uri,resource] of texts)this.texts.set(uri,resource);
+  this.skill=skill;
  }
  snapshot(value:Native) {
   const text=JSON.stringify(canonical(value));

@@ -38,6 +38,8 @@ try {
  }
  client=await connect(access);
  const contract=await call(client,'get_h5p_type_contract',{machine_name:'H5P.TrueFalse',major_version:1,minor_version:8});
+ const repeated=await call(client,'get_h5p_type_contract',{machine_name:'H5P.TrueFalse',major_version:1,minor_version:8});
+ assert.equal(repeated.raw_schema.uri,contract.raw_schema.uri);
  assert((await client.readResource({uri:contract.raw_schema.uri})).contents[0].text.includes('semantics'));
  const prepared=await call(client,'prepare_stored_h5p_activity',{activity:{title:'HTTP math',library:'H5P.TrueFalse 1.8',params:{question:'<p>\\(1+1=2\\)</p>',correct:'true'}}});
  const source=JSON.parse((await client.readResource({uri:'h5p-authoring://v1/examples'})).contents[0].text)[0];

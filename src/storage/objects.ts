@@ -76,7 +76,7 @@ export class Objects {
   this.row(id);return bytes;
  }
  /** One object contains all payload files and its manifest; SQLite is its publication barrier. */
- async publish(kind:Kind,ttl:number,writer:(stage:string,final:string,signal:AbortSignal)=>Promise<Native>,options:{key?:string;digest?:string;signal?:AbortSignal}={}):Promise<Stored> {
+ async publish(kind:Kind,ttl:number,writer:(stage:string,final:string,signal:AbortSignal)=>Promise<Native>,options:{key?:string;digest?:string;schemaHash?:string;signal?:AbortSignal}={}):Promise<Stored> {
   const signal=AbortSignal.any([AbortSignal.timeout(this.budgets.seconds*1000),...(options.signal?[options.signal]:[])]);
   if(!Number.isSafeInteger(ttl)||ttl<1||ttl>31536000000) throw storageError('SCHEMA_VALIDATION_FAILED');
   if(options.key!==undefined&&(!options.key||options.key.length>200||!/^[a-f0-9]{64}$/.test(options.digest||''))) throw storageError('SCHEMA_VALIDATION_FAILED');
@@ -85,6 +85,11 @@ export class Objects {
   while(!id) {
    signal.throwIfAborted();
    const claim=this.db.transaction(()=>{
+    if(kind==='schema' && options.schemaHash){
+     const prior=this.db.query("SELECT id,state FROM objects WHERE tenant=? AND owner=? AND kind='schema' AND COALESCE(json_extract(metadata,'$.schemaHash'),json_extract(files,'$.payload.sha256'))=? AND ((state='ready' AND expires>?) OR (state='staging' AND lease>?)) LIMIT 1")
+      .get(this.principal.tenant,this.principal.owner,options.schemaHash,this.now(),this.now()) as Row|null;
+     if(prior)return prior.state==='ready'?{existing:prior.id}:{wait:true};
+    }
     if(options.key) {
      const previous=this.db.query('SELECT * FROM requests WHERE tenant=? AND owner=? AND key=?').get(this.principal.tenant,this.principal.owner,options.key) as Native;
      if(previous) {
@@ -101,7 +106,7 @@ export class Objects {
     const global=this.db.query('SELECT COUNT(*) AS count,COALESCE(SUM(bytes),0) AS bytes FROM objects').get() as Native;
     if(global.count>=32768||global.bytes+this.budgets.bytes>8589934592)throw storageError('LIMIT_EXCEEDED');
     const fresh=randomBytes(16).toString('hex');
-    this.db.query('INSERT INTO objects VALUES(?,?,?,?,?,?,?,?,?,?)').run(fresh,this.principal.tenant,this.principal.owner,kind,'staging',this.now()+ttl,this.now()+this.budgets.seconds*1000,'{}','{}',this.budgets.bytes);
+    this.db.query('INSERT INTO objects VALUES(?,?,?,?,?,?,?,?,?,?)').run(fresh,this.principal.tenant,this.principal.owner,kind,'staging',this.now()+ttl,this.now()+this.budgets.seconds*1000,JSON.stringify({schemaHash:options.schemaHash}),'{}',this.budgets.bytes);
     if(options.key) this.db.query('INSERT OR REPLACE INTO requests VALUES(?,?,?,?,?)').run(this.principal.tenant,this.principal.owner,options.key,options.digest!,fresh);
     return {id:fresh};
    }).immediate();
