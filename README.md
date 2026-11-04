@@ -20,6 +20,183 @@ with uploaded asset IDs. Old preparations require explicit re-preparation;
 existing stored artifacts remain readable. See [data transition](docs/architecture/013-native-transition.md)
 and [native backend contract](docs/architecture/011-native-content.md).
 
+## Optional local scientific figures (pilot)
+
+The local CLI and stdio MCP can render a vertical equilibrium diagram with two
+equal, opposite forces. On a new host, enable the feature, install the pinned
+Typst compiler and prepare the pinned scientific package profile:
+
+```powershell
+$env:H5P_MCP_TYPST_ENABLED = '1'
+$env:H5P_MCP_TYPST_PROVIDER = 'managed'
+$env:H5P_MCP_TYPST_PACKAGES = Join-Path (Get-Location) 'figure-packages'
+h5p-mcp figure install
+h5p-mcp figure setup $env:H5P_MCP_TYPST_PACKAGES
+h5p-mcp figure status
+```
+
+For an existing Typst 0.15.1 on PATH, choose the `system` provider and skip
+`figure install`. An explicit absolute `H5P_MCP_TYPST_BIN` takes precedence
+over either provider. Setup requires a new package directory; you can also
+select an existing verified profile containing the same pinned package trees.
+
+The installer supports x64 and ARM64 on Windows, macOS and Linux (musl binaries).
+It uses the system tar utility to read three named archive members. It checks the
+release and executable digests, retains LICENSE and NOTICE, and activates the
+binary only after a smoke compile. A repeated install reuses a valid copy.
+Use `figure repair` to stage a fresh copy and `figure remove` to remove managed
+compiler builds. Previous builds are retained until removal, so a failed update
+does not discard the previous selection. Removal leaves package profiles and
+editable figures intact. The installer never modifies PATH.
+
+Save this example as `force.json` and run `h5p-mcp figure force force.json my-figure`
+to create a new editable directory:
+
+```json
+{"forceN":8,"upLabel":"Tension","downLabel":"Weight","alt":"Two vertical arrows of equal length start at the body. Tension is 8 N upward and weight is 8 N downward."}
+```
+
+The result contains editable Typst and JSON, an SVG master, a PNG at 192 ppi,
+and a manifest with hashes, dimensions and alternative text. Use `figure.png`
+as an image asset in the existing H5P build flow. Re-run the command with the
+saved JSON to regenerate the diagram.
+
+The local stdio MCP exposes `render_force_figure` when its host starts with
+`H5P_MCP_TYPST_ENABLED=1`. Send the same four fields as the CLI example. The
+result includes the local editable directory, a PNG preview readable with
+`resources/read`, and an `asset_id` usable in the asset map for
+`prepare_stored_h5p_activity` or `prepare_stored_h5p_source`. The stored PNG
+expires after one day; the editable export directory persists. Set the same
+compiler provider and package root in the MCP process environment.
+Installation is a host CLI operation. HTTP clients cannot invoke the renderer.
+H5P playback consumes the embedded PNG without Typst.
+
+The local renderer accepts the fixed template's JSON fields. Labels are data.
+Typst runs in a private figure directory with verified packages; package tree
+links are rejected. Each SVG or PNG output is limited to 4 MiB while compiling.
+The runner requires one page and checks the 16-million-pixel budget at 192 ppi
+before rasterizing.
+
+For AI-authored diagrams, enable the local stdio tool `render_typst_figure` with
+`H5P_MCP_TYPST_ENABLED=1`, `H5P_MCP_TYPST_SANDBOX=docker` and the verified
+`H5P_MCP_TYPST_PACKAGES` directory from figure setup. Supply `source` (one
+editable Typst document, up to 64 KiB) and `alt`. Use built-ins or the pinned scientific packages. For drawings use
+`@preview/cetz:0.5.3`, for data plots `@preview/lilaq:0.6.0`, for chemical notation `@preview/chemformula:0.1.3` and for molecular structures `@preview/typed-smiles:0.13.0`. To upgrade an existing CeTZ-only installation, run `figure setup` into a new directory and point `H5P_MCP_TYPST_PACKAGES` there. Rebuilding a saved figure uses its recorded profile. The bundle contains the original source, SVG master
+and PNG. The renderer returns a PNG preview and the default H5P uses that raster.
+
+Prepare a local Linux Docker Engine and explicitly pull the pinned official
+compiler once:
+
+```sh
+docker pull ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f
+```
+
+The runner uses the Docker Desktop Linux pipe on Windows or the local
+`/var/run/docker.sock` socket on Unix. Each compile has two read-only input
+mounts, a read-only root, no external network, no capabilities, a non-root UID,
+a 256 MiB memory limit with no extra swap, one CPU and a 64-process limit.
+Rendering requires an available local engine with these limits. The image is
+never pulled during a request. Source rendering is unavailable over HTTP.
+
+For a single Typst compilation, install the optional raster tools for the architecture
+of the local Linux engine (AMD64 or ARM64). Run setup in an allowed export root:
+
+```sh
+docker pull ubuntu@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+h5p-mcp figure raster-setup /absolute/path/to/new-raster-profile
+```
+
+Set `H5P_MCP_TYPST_RASTER_DIR` to that absolute directory in the stdio server
+environment. Setup downloads resvg 0.49.0 and oxipng 10.2.1 from their GitHub
+releases and verifies both archives and executables. Rendering validates SVG and
+page geometry first. A second isolated container converts that SVG at 192 ppi
+and compresses the PNG losslessly. The manifest records both versions, binary
+hashes, architecture, container image digest and compression level. Existing
+figure projects retain their recorded rendering method when rebuilt. Without
+a configured raster profile, new projects use the original direct Typst PNG.
+Clients can read package guidance and editable examples through
+`skill://typst-graphics/SKILL.md` and its declared resources.
+
+To prepare immutable local images, enable the Docker sandbox and set
+`H5P_MCP_TYPST_PACKAGES` and `H5P_MCP_TYPST_RASTER_DIR` to the two verified
+setup directories. Use a local Linux Docker engine with BuildKit and the
+pinned base images shown above. Run:
+
+```sh
+h5p-mcp figure image-setup /absolute/path/to/new-profile.json
+```
+
+Set `H5P_MCP_TYPST_IMAGE_PROFILE` in the stdio server environment to that
+administrator-controlled file. Setup verifies the scientific package trees and
+the two executables for the engine architecture before building. Both images
+are tagged locally. Rendering starts two fresh containers by immutable image
+ID and mounts only the current input read-only. Each new figure records both
+IDs and the engine architecture in its editable manifest. Keep the profile
+and its images with the deployment. To repair a pruned installation, repeat
+setup into a new file and compare both IDs before selecting it. A project
+requiring different IDs or another architecture fails explicitly. Portable
+activity rebuilds using the captured PNG still work without a renderer.
+For earlier direct or SVG-derived projects, retain the package and raster
+directories their original rendering method requires.
+On Windows, a stdio client can launch a Linux installation of the MCP through
+WSL2. Enable Docker Desktop integration for that distribution and verify
+`docker --host unix:///var/run/docker.sock info` there. Install Linux Bun and
+the MCP in the distribution. Run both figure setup commands there and use
+Linux paths for the package profile, raster profile, temporary files and
+store. Keep these working directories on the WSL filesystem; a path under
+`/mnt/c` or `/mnt/d` crosses the Windows filesystem boundary for each small
+package file. Exported files are accessible from Windows through
+`\\wsl.localhost\Ubuntu\`. The Windows client can launch `wsl.exe` with these
+example arguments (substitute the Linux executable and profile paths):
+
+```text
+-d Ubuntu --cd /home/teacher --exec env H5P_MCP_TYPST_ENABLED=1 H5P_MCP_TYPST_SANDBOX=docker H5P_MCP_TYPST_PACKAGES=/home/teacher/figures/packages H5P_MCP_TYPST_RASTER_DIR=/home/teacher/figures/raster /home/teacher/.bun/bin/bun /home/teacher/h5p/node_modules/h5p-mcp/dist/core/cli.js stdio
+```
+
+The Linux MCP checks resource limits through the local Docker socket on each
+request. Both rendering stages still run in fresh isolated containers.
+
+The general tool also returns a text resource at `source.uri` scoped to the same
+owner and expiration as the PNG. Copy the local figure directory for durable
+editing. To capture a figure with an activity, use the asset key from its JSON
+source and the directory returned by the renderer:
+
+```sh
+h5p-mcp freeze activity.json lesson --figure curve /path/to/figure-directory
+h5p-mcp rebuild lesson lesson-copy.h5p
+```
+
+Freeze verifies the matching PNG and copies the generating files to
+`lesson/figures/curve/`. The exact H5P rebuild uses the captured PNG and works
+without Typst. For a revision, edit a copy of the figure directory, then run
+`h5p-mcp figure rebuild /path/to/edited-copy /path/to/new-figure` with the
+offline renderer enabled. Point the activity's asset at the new PNG and freeze
+a new project. The reader supports both v1 and v2. Exact reconstruction in either format requires the backend recorded in the project lock.
+
+See the [scientific figure examples](examples/scientific-figures/README.md) for editable source and Spanish prompts, visible data alternatives and feedback.
+
+### Embedding a static SVG for a verified destination
+
+Regular figure rendering still returns a PNG asset for default H5P Core. Both
+master generation and SVG uploads validate a bounded static path/glyph subset.
+The policy checks namespaces, geometry, paths and internal references. It rejects
+scripts, foreign elements, stylesheets, external resources and embedded rasters.
+
+To require a vector for a specific destination:
+
+1. Register its library inventory with `register_h5p_target_profile`. The host
+   operator verifies SVG **content** import and playback at that destination
+   and lists its exact returned profile ID in `H5P_MCP_SVG_CONTENT_TARGETS`
+   (comma-separated IDs in the MCP server environment). A new profile needs
+   its own approval. This setting affects only the MCP.
+2. Upload the master file with `upload_h5p_asset`, MIME `image/svg+xml`.
+   The immutable owner-scoped asset can be read through the returned SVG URI.
+3. In the activity image, use the SVG asset ID and `image/svg+xml`.
+   Prepare through `prepare_stored_h5p_source` or `prepare_stored_h5p_activity`.
+   Pass the approved `target_profile_id` to `export_prepared_h5p_activity`
+   and to `validate_stored_h5p_package`. A missing or unapproved target rejects
+   vector export. For an ordinary destination use the renderer's PNG asset.
+
 ## Workflow
 
 HTTP is opt-in: `h5p-mcp http <host-config.json>`. It requires configured OIDC

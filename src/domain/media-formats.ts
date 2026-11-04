@@ -1,6 +1,6 @@
 // Uploads use canonical MIME names. Native H5P fields additionally accept legacy audio aliases.
 const extensions = new Map(Object.entries({
-  'image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp','image/bmp':'bmp','image/tiff':'tiff','image/avif':'avif',
+  'image/svg+xml':'svg','image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp','image/bmp':'bmp','image/tiff':'tiff','image/avif':'avif',
   'audio/mpeg':'mp3','audio/wav':'wav','audio/ogg':'ogg','audio/mp4':'m4a','audio/webm':'webm',
   'video/mp4':'mp4','video/webm':'webm','video/ogg':'ogv','application/pdf':'pdf','text/vtt':'vtt',
 }));

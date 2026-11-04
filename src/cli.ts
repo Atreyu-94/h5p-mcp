@@ -9,6 +9,52 @@ import {freezeSource,rebuildSource} from './application/source-project.js';
 const [command,...args]=process.argv.slice(2);
 try {
  if(command==='stdio') await stdio();
+ else if(command==='figure') {
+  const {figureStatus,renderForceFigure}=await import('./infrastructure/typst-figure.js');
+  const controller=new AbortController(),abort=()=>controller.abort();
+  process.once('SIGINT',abort);process.once('SIGTERM',abort);
+  try{
+   if(args.length===1 && args[0]==='status')console.log(JSON.stringify(await figureStatus(controller.signal)));
+   else if(args.length===1 && ['install','repair','remove'].includes(args[0])){
+    const {installCompiler,removeCompiler}=await import('./infrastructure/typst-compiler.js');
+    console.log(JSON.stringify(args[0]==='remove'?await removeCompiler(controller.signal):await installCompiler(controller.signal,args[0]==='repair')));
+   }
+   else if((args.length===2 && ['setup','raster-setup','image-setup'].includes(args[0]))||(args.length===3 && ['force','rebuild'].includes(args[0]))){
+    const service=new Service();
+    try{
+     await service.initialize();
+     const output=await service.authorize(path.resolve(args.at(-1)!),'EXPORT');
+     if(args[0]==='image-setup'){
+      const {setupImages}=await import('./infrastructure/typst-images.js');
+      console.log(JSON.stringify(await setupImages(output,controller.signal)));
+     }else if(args[0]==='raster-setup'){
+      const {setupDockerRaster}=await import('./infrastructure/typst-sandbox.js');
+      console.log(JSON.stringify(await setupDockerRaster(output,controller.signal)));
+     }else if(args[0]==='setup'){
+      const {setupFigureProfile}=await import('./infrastructure/typst-profile.js');
+      console.log(JSON.stringify(await setupFigureProfile(output,controller.signal)));
+     }else if(args[0]==='rebuild'){
+      const root=await service.authorize(path.resolve(args[1]),'ASSET');
+      const input=async(name:string,max:number)=>{
+       const filename=await service.authorize(path.join(root,name),'ASSET');
+       if(path.dirname(filename)!==root)throw new Error('Figure project file outside project directory.');
+       return new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,max));
+      };
+      const manifest=JSON.parse(await input('manifest.json',65536));
+      const {renderTypstFigure,checkFigureProject}=await import('./infrastructure/typst-sandbox.js');
+      const lockedProfile=checkFigureProject(manifest);
+      const source=await input('figure.typ',65536);
+      console.log(JSON.stringify(await renderTypstFigure({source,alt:manifest.image?.alt},output,controller.signal,lockedProfile,manifest.renderPolicy,manifest.images)));
+     }else{
+      const input=await service.authorize(path.resolve(args[1]),'ASSET');
+      console.log(JSON.stringify(await renderForceFigure(input,output,controller.signal)));
+     }
+    }finally{await service.close();}
+   }
+   else throw new Error('Use figure status, figure install|repair|remove, figure image-setup <new-profile.json> | figure raster-setup <new-tool-root> | figure setup <new-package-root> or figure force <spec.json> <new-directory> | figure rebuild <figure-project> <new-directory>');
+  }catch(error){console.error(JSON.stringify({ok:false,error:error instanceof Error?error.message:String(error)}));process.exitCode=1;}
+  finally{process.off('SIGINT',abort);process.off('SIGTERM',abort);}
+ }
  else if(command==='http') {
   const {config}=await import('./http/auth.js'),{http}=await import('./http/server.js');
   const settings=config(JSON.parse((await readBounded(args[0],65536)).toString('utf8'))),app=http(settings);
@@ -17,7 +63,7 @@ try {
   let closing=false;const close=async()=>{if(closing)return;closing=true;await app.close();await listener.stop(true);};
   process.once('SIGINT',()=>{void close();});process.once('SIGTERM',()=>{void close();});
  }
- else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json|yaml> | build <source.json|yaml> <output-name> | freeze <source.json|yaml> <new-directory> | rebuild <project-directory> <output-name> | admin <refresh|install|package> [name|path]');
+ else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json|yaml> | build <source.json|yaml> <output-name> | freeze <source.json|yaml> <new-directory> [--figure <asset-id> <figure-project>] | rebuild <project-directory> <output-name> | figure status | figure install|repair|remove | figure image-setup <new-profile.json> | figure raster-setup <new-tool-root> | figure setup <new-package-root> | figure force <spec.json> <new-directory> | figure rebuild <figure-project> <new-directory> | admin <refresh|install|package> [name|path]');
  else {
   const service=new Service();await service.initialize();
   try {
@@ -26,7 +72,13 @@ try {
     if(command==='freeze'){
      const filename=path.resolve(args[0]),{source}=parseSource(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)),/\.ya?ml$/i.test(filename)?'yaml':'json');
      if(source?.assets&&typeof source.assets==='object')for(const [id,file] of Object.entries(source.assets))if(typeof file==='string')source.assets[id]=path.resolve(path.dirname(filename),file);
-     result=await freezeSource(source,await service.vault(),await service.authorize(path.resolve(args[1]),'EXPORT'),file=>service.authorize(file,'ASSET'));
+     const figures:Record<string,string>=Object.create(null);
+     for(let i=2;i<args.length;i+=3){
+      const [flag,id,bundle]=args.slice(i,i+3);
+      if(flag!=='--figure'||!id||!bundle||Object.hasOwn(figures,id))throw new Error('Expected --figure <asset-id> <figure-project>.');
+      figures[id]=path.resolve(bundle);
+     }
+     result=await freezeSource(source,await service.vault(),await service.authorize(path.resolve(args[1]),'EXPORT'),file=>service.authorize(file,'ASSET'),figures);
     }else{
      const directory=await service.authorize(path.resolve(args[0]),'PACKAGE'),compiled=await rebuildSource(directory);
      const destination=await service.destination(args[1]);

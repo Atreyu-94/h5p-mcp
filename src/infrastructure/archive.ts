@@ -1,3 +1,4 @@
+import {svgBytes,validateStaticSvg} from '../domain/static-svg.js';
 import fs from 'node:fs/promises';
 import {createRequire} from 'node:module';
 const load=createRequire(import.meta.url);
@@ -5,7 +6,7 @@ import {limit,checkTree} from '../domain/limits.js';
 import type {Native} from '../domain/types.js';
 const reject=()=>Object.assign(new Error('Archive rejected'),{code:'UNSAFE_ARCHIVE'});
 /** Drain every member, including files Lumi would ignore, before any installation. */
-export async function preflight(filename:string,contentRequired=false) {
+export async function preflight(filename:string,contentRequired=false,allowSvgContent?:boolean) {
  if((await fs.stat(filename)).size>limit('ZIP_ARCHIVE_BYTES',134217728)) throw reject();
  const yauzl=load('yauzl-promise'),crc32=load('@node-rs/crc32').crc32;
  let zip:Native;
@@ -35,14 +36,20 @@ export async function preflight(filename:string,contentRequired=false) {
    if(entry.uncompressedSize>limit('ZIP_MEMBER_BYTES',134217728)||declared>limit('ZIP_BYTES',536870912)||
       entry.uncompressedSize>Math.max(1,entry.compressedSize)*limit('ZIP_RATIO',1000)) throw reject();
    const json=contentRequired&&['h5p.json','content/content.json'].includes(name);
+   const svg=!directory&&name.startsWith('content/')&&/\.svg$/i.test(name);
+   if(svg){
+    if(allowSvgContent===false)throw Object.assign(new Error('Target does not accept SVG content'),{code:'TARGET_INCOMPATIBLE'});
+    if(entry.uncompressedSize>svgBytes)throw reject();
+   }
    const chunks:Buffer[]=[];let bytes=0,crc=0;
    const stream=await entry.openReadStream();
    for await(const chunk of stream) {
     bytes+=chunk.length;expanded+=chunk.length;
-    if(bytes>limit('ZIP_MEMBER_BYTES',134217728)||expanded>limit('ZIP_BYTES',536870912)||(json&&bytes>limit('JSON_BYTES',16777216))) throw reject();
-    crc=crc32(chunk,crc);if(json) chunks.push(chunk);
+    if(bytes>limit('ZIP_MEMBER_BYTES',134217728)||expanded>limit('ZIP_BYTES',536870912)||(svg&&bytes>svgBytes)||(json&&bytes>limit('JSON_BYTES',16777216))) throw reject();
+    crc=crc32(chunk,crc);if(json||svg) chunks.push(chunk);
    }
    if(bytes!==entry.uncompressedSize||(crc>>>0)!==(entry.crc32>>>0)) throw reject();
+   if(svg)validateStaticSvg(Buffer.concat(chunks));
    if(json) {
     const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
     if(!value||typeof value!=='object'||Array.isArray(value)) throw reject();
@@ -51,5 +58,5 @@ export async function preflight(filename:string,contentRequired=false) {
   }
   if(contentRequired&&(!roots['content/content.json']||!roots['h5p.json']?.mainLibrary||
      !Array.isArray(roots['h5p.json'].preloadedDependencies)||!roots['h5p.json'].preloadedDependencies.length)) throw reject();
- }catch{throw reject();}finally{if(zip) await zip.close();}
+ }catch(error:Native){if(error.code==='TARGET_INCOMPATIBLE')throw error;throw reject();}finally{if(zip) await zip.close();}
 }

@@ -118,7 +118,16 @@ async function checkEquationCase(name, page, frame) {
     }
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const channel=process.env.H5P_MCP_BROWSER_CHANNEL || 'chrome';
-    browser = await chromium.launch({ ...(channel==='chromium'?{}:{channel}), headless: true });
+    const figureMode=process.env.H5P_FIGURE_QA;
+    if(figureMode==='zoom'){
+      const profile=path.join(root,'zoom-profile');
+      await fs.mkdir(path.join(profile,'Default'),{recursive:true});
+      const level=Math.log(2)/Math.log(1.2);
+      await fs.writeFile(path.join(profile,'Default','Preferences'),JSON.stringify({
+        partition:{default_zoom_level:{x:level},per_host_zoom_levels:{x:{'127.0.0.1':level}}}
+      }));
+      browser=await chromium.launchPersistentContext(profile,{channel,headless:true,viewport:null,args:['--window-size=1000,800']});
+    }else browser=await chromium.launch({ ...(channel==='chromium'?{}:{channel}), headless:figureMode!=='narrator' });
     for (const [index, name] of names.entries()) {
       const page = await browser.newPage();
       const errors = [];
@@ -128,6 +137,12 @@ async function checkEquationCase(name, page, frame) {
       await page.waitForFunction(() => window.H5P?.instances?.length > 0);
       const frame = page.frames().find(f => f !== page.mainFrame()) || page.mainFrame();
       await frame.locator('.h5p-content').waitFor({ state: 'visible' });
+      if(figureMode){
+        await require('./tooling/scientific-player.cjs')(figureMode,page,frame);
+        if(errors.length)throw new Error(errors.join('; '));
+        await page.close();
+        continue;
+      }
       if (process.env.H5P_DRAGTEXT_CASES) {
         // The independent fixture maps each two-digit activity ID to its intended targets and distractors.
         const cases=JSON.parse(await fs.readFile(process.env.H5P_DRAGTEXT_CASES,'utf8'));

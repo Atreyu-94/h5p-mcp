@@ -180,6 +180,7 @@
         },
         "mime": {
           "enum": [
+            "image/svg+xml",
             "image/png",
             "image/jpeg",
             "image/gif",
@@ -821,6 +822,7 @@
             },
             "mime": {
               "enum": [
+                "image/svg+xml",
                 "image/png",
                 "image/jpeg",
                 "image/gif",

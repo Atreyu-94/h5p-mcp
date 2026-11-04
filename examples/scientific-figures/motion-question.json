@@ -1,0 +1,83 @@
+{
+  "type": "multi_choice",
+  "library": {
+    "name": "H5P.MultiChoice 1.16",
+    "patch": 27,
+    "semantics_sha256": "57435fbb96627f7de33e3289d266aa78cccb95148ff44141818a06c2d1ea4f55"
+  },
+  "question": {
+    "format": "plain",
+    "value": "Posición de un móvil durante seis segundos. Los segmentos rectos unen las lecturas. Tiempo en segundos y posición en metros: (0, 0), (2, 4), (4, 4), (6, 2). ¿Entre qué dos lecturas permaneció constante la posición?"
+  },
+  "mode": "single",
+  "scoring": "all_or_nothing",
+  "shuffle": true,
+  "correct_ids": [
+    "o1"
+  ],
+  "choices": [
+    {
+      "id": "o1",
+      "text": {
+        "format": "plain",
+        "value": "Entre 2 y 4 s."
+      },
+      "selected_feedback": {
+        "format": "plain",
+        "value": "Entre 2 y 4 s, ambas lecturas son de 4 m. El segmento horizontal representa ese intervalo de reposo."
+      }
+    },
+    {
+      "id": "o2",
+      "text": {
+        "format": "plain",
+        "value": "Entre 0 y 2 s."
+      },
+      "selected_feedback": {
+        "format": "plain",
+        "value": "Compara las posiciones en los extremos de cada intervalo."
+      }
+    },
+    {
+      "id": "o3",
+      "text": {
+        "format": "plain",
+        "value": "Entre 4 y 6 s."
+      },
+      "selected_feedback": {
+        "format": "plain",
+        "value": "Revisa las posiciones a los 4 y 6 s antes de volver a intentarlo."
+      }
+    }
+  ],
+  "assets": {
+    "grafica": "rendered-motion/figure.png"
+  },
+  "image": {
+    "id": "figura",
+    "asset": "grafica",
+    "mime": "image/png",
+    "alt": "Gráfica de posición frente al tiempo. Las cuatro lecturas se incluyen junto a la pregunta.",
+    "library": {
+      "name": "H5P.Image 1.1",
+      "patch": 33,
+      "semantics_sha256": "0c2f029cb5d13b8846530271548089b3f9fc87c1035d7af8c3dadedabf5aee1a"
+    },
+    "copyright": {
+      "author": "Ejemplo didáctico",
+      "license": "U"
+    }
+  },
+  "schema_version": "1",
+  "project_id": "motion-example",
+  "id": "position",
+  "title": "Leer una gráfica de posición",
+  "language": "es",
+  "ui": {
+    "language": "es",
+    "missing": "fallback"
+  },
+  "license": "U",
+  "retry": true,
+  "show_solution": true
+}

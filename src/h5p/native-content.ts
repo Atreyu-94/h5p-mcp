@@ -1,3 +1,4 @@
+import {svgMime,validateStaticSvg} from '../domain/static-svg.js';
 import {nativeExtension} from '../domain/media-formats.js';
 import fs from 'node:fs/promises';
 import {createWriteStream} from 'node:fs';
@@ -37,16 +38,22 @@ export async function executeNative(request:CoreRequest) {
  try {
   const media=new Map<string,string>();let mediaBytes=0;
   const uploaded=await prepareActivity({libraries:new FileLibraryRepository(libraries),coreApiVersion:{major:1,minor:28},saveMedia:async(_entry,file)=>{
+   if(file.mimetype===svgMime&&request.allow_svg_content!==true)throw fail('TARGET_INCOMPATIBLE','Target does not permit SVG content.');
    const digest=createHash('sha256').update(file.data).digest('hex');
 
    const name=`media/${digest}.${nativeExtension(file.mimetype)}`;
    if(file.data.length>limit('ZIP_MEMBER_BYTES',134217728))throw fail('LIMIT_EXCEEDED','Package member byte budget exceeded');
    if(!media.has(name))mediaBytes+=file.data.length;
    if(!media.has(name)){const target=path.join(stage,path.basename(name));await fs.writeFile(target,file.data,{flag:'wx'});media.set(name,target);}
+   if(file.mimetype===svgMime){
+    const vector=validateStaticSvg(file.data);
+    return {path:name,width:Math.ceil(vector.width*(vector.wUnits==='pt'?96/72:1)),
+     height:Math.ceil(vector.height*(vector.hUnits==='pt'?96/72:1))};
+   }
    const dimensions=file.mimetype.startsWith('image/')?load('probe-image-size').sync(file.data):null;
    return {path:name,...(dimensions?{width:dimensions.width,height:dimensions.height}:{})};
   }},report.activity);
-  if(!uploaded.ok)throw Object.assign(fail('INVALID_PARAMETER','Media preparation failed'),{details:uploaded.diagnostics});
+  if(!uploaded.ok)throw Object.assign(fail(uploaded.diagnostics.some((d:Native)=>d.code==='TARGET_INCOMPATIBLE')?'TARGET_INCOMPATIBLE':'INVALID_PARAMETER','Media preparation failed'),{details:uploaded.diagnostics});
   const graph=await resolveLibraries(new FileLibraryRepository(libraries),report.activity,report.mathematics.detected);
   for(const node of graph.values()){const core=node.metadata.coreApi;if(core&&(core.majorVersion>1||core.majorVersion===1&&core.minorVersion>28))throw fail('TARGET_INCOMPATIBLE','Dependency requires a newer Core');}
   const {preloaded,dynamic}=runtimeDependencies(graph,report.activity,report.mathematics.detected);
@@ -85,6 +92,6 @@ export async function executeNative(request:CoreRequest) {
   }catch(error){zip.outputStream.destroy();await writing.catch(()=>{});throw error;}
   const after=await nativeManifest(libraries,report.activity,report.mathematics);
   if(!sameNativeManifest(report.activity.preparation,after))throw fail('STALE_PREPARATION','Files changed during export');
-  return {h5p_json:h5p,content_json:uploaded.activity.params,preparation_manifest:after,verification:{structure:'passed',semantics:'passed',importation:'not_run',playback:'not_run',grading:'not_run'},export_mode:request.export_mode??'content-only'};
+  return {svg_content:[...media.keys()].some(file=>file.endsWith('.svg')),h5p_json:h5p,content_json:uploaded.activity.params,preparation_manifest:after,verification:{structure:'passed',semantics:'passed',importation:'not_run',playback:'not_run',grading:'not_run'},export_mode:request.export_mode??'content-only'};
  }finally{await fs.rm(stage,{recursive:true,force:true});}
 }

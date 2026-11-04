@@ -196,3 +196,137 @@ test('QuestionSet children inherit UI defaults while retaining explicit child ov
   expect(missing.diagnostics).toContainEqual(expect.objectContaining({pointer:'/questions/0/ui/language',reason:'translation'}));
  }finally{await fs.rm(root,{recursive:true,force:true});}
 },120000);
+
+test.skipIf(process.env.H5P_TEST_TYPST_DOCKER!=='1')('portable figure project survives expiry, edits and two independent H5P exports',async()=>{
+ const {Service}=await import('../../src/adapters/service.js');
+ const {Objects}=await import('../../src/storage/objects.js'),{Vault}=await import('../../src/storage/vault.js');
+ const {freezeSource,rebuildSource}=await import('../../src/application/source-project.js');
+ const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-edit-'));
+ const data=path.join(tmp,'data'),store=path.join(tmp,'store');
+ let now=Date.now();
+ const objects=new Objects(store,{tenant:'local',owner:'local'},()=>now),vault=new Vault(objects,data);
+ const oldExport=process.env.H5P_MCP_EXPORT_DIR;
+ process.env.H5P_MCP_EXPORT_DIR=tmp;
+ const teacher=new Service(undefined,{data,store}),other=new Service({tenant:'local',owner:'other'},{data,store});
+ teacher.vault=async()=>vault;
+ try{
+  await compilerFixture(data);await objects.initialize();
+  const text=await fs.readFile(new URL('../fixtures/typst/parabola.typ',import.meta.url),'utf8');
+  const figure=(await teacher.call('render_typst_figure',{source:text,alt:'Parabola'})).structuredContent;
+  expect(figure.ok).toBe(true);
+  expect((await teacher.readResource(figure.source.uri)).contents[0]).toMatchObject({mimeType:'text/plain',text});
+  await expect(other.readResource(figure.source.uri)).rejects.toMatchObject({code:'OBJECT_NOT_FOUND'});
+  const illustration={id:'curve',asset:'curve',mime:'image/png',alt:'Parabola',copyright:{author:'Teacher',license:'CC BY'},library:pin('H5P.Image 1.1')};
+  const activities=[trueFalse(),multiChoice()];
+  for(const activity of activities){
+   const prepared=await vault.prepare({...activity,image:illustration,assets:{curve:figure.asset_id}},86400000,undefined,undefined,true);
+   const exported=await vault.export(prepared.id,'export-'+activity.id);
+   const zip=await createRequire(import.meta.url)('yauzl-promise').open(path.join(exported.root,'payload'));
+   const media:string[]=[];
+   try{
+    for await(const entry of zip){
+     if(!entry.filename.startsWith('content/')||!entry.filename.endsWith('.png'))continue;
+     const hash=createHash('sha256');
+     for await(const bytes of await entry.openReadStream())hash.update(bytes);
+     media.push(hash.digest('hex'));
+    }
+   }finally{await zip.close();}
+   expect(media).toContain(figure.manifest.hashes['figure.png']);
+  }
+  const project=path.join(tmp,'portable');
+  const activity={...activities[0],image:illustration,assets:{curve:path.join(figure.directory,'figure.png')}};
+  const entry=fileURLToPath(new URL('../../dist/core/cli.js',import.meta.url));
+  const input=path.join(tmp,'activity.json');
+  await fs.writeFile(input,JSON.stringify(activity));
+  const capture=Bun.spawn([process.execPath,entry,'freeze',input,project,'--figure','curve',figure.directory],{
+   env:{...process.env,H5P_MCP_DATA_DIR:data,H5P_MCP_STORE_DIR:path.join(tmp,'capture-store')},stdout:'pipe',stderr:'pipe'});
+  const frozen=await new Response(capture.stdout).text(),captureError=await new Response(capture.stderr).text();
+  if(await capture.exited!==0)throw new Error(captureError+frozen);
+  expect(JSON.parse(frozen).format).toBe('h5p-source-project-v2');
+  const moved=path.join(tmp,'relocated');
+  await fs.rename(project,moved);
+  now+=86400001;await objects.collect();
+  await expect(teacher.readResource(figure.source.uri)).rejects.toMatchObject({code:'OBJECT_EXPIRED'});
+  const offline=Bun.spawn([process.execPath,entry,'rebuild',moved,'offline-copy.h5p'],{
+   env:{...process.env,H5P_MCP_EXPORT_DIR:tmp,H5P_MCP_TYPST_ENABLED:'0',H5P_MCP_DATA_DIR:data},stdout:'pipe',stderr:'pipe'});
+  const result=await new Response(offline.stdout).text(),diagnostics=await new Response(offline.stderr).text();
+  if(await offline.exited!==0)throw new Error(diagnostics+result);
+  expect(JSON.parse(result).ok).toBe(true);
+  const portable=path.join(moved,'figures','curve'),edited=path.join(tmp,'edited');
+  await fs.writeFile(path.join(portable,'figure.typ'),text.replace('stroke: blue','stroke: red'));
+  const proc=Bun.spawn([process.execPath,fileURLToPath(new URL('../../dist/core/cli.js',import.meta.url)),
+   'figure','rebuild',portable,edited],{env:{...process.env,H5P_MCP_DATA_DIR:data},stdout:'pipe',stderr:'pipe'});
+  const output=await new Response(proc.stdout).text(),err=await new Response(proc.stderr).text();
+  if(await proc.exited!==0)throw new Error(err+output);
+  expect(JSON.parse(output).manifest.hashes['figure.png']).not.toBe(figure.manifest.hashes['figure.png']);
+  await expect(rebuildSource(moved)).rejects.toMatchObject({code:'OBJECT_INTEGRITY_FAILED'});
+  const invalid=path.join(tmp,'mismatched');
+  await expect(freezeSource(activity,vault,invalid,async f=>f,{curve:edited})).rejects.toMatchObject({code:'STALE_PREPARATION'});
+  expect(await fs.exists(path.join(invalid,'project.lock.json'))).toBe(false);
+ }finally{
+  if(oldExport===undefined)delete process.env.H5P_MCP_EXPORT_DIR;else process.env.H5P_MCP_EXPORT_DIR=oldExport;
+  await teacher.close();await other.close();await vault.close();await fs.rm(tmp,{recursive:true,force:true});
+ }
+},180000);
+
+test('stored SVG is validated, owner scoped and embedded only for a host-approved target',async()=>{
+ const {Service}=await import('../../src/adapters/service.js');
+ const {validatePackage}=await import('../../src/h5p/packages.js');
+ const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-svg-target-')),store=path.join(tmp,'store');
+ const host=new Service(undefined,{data:tmp,store}),other=new Service({tenant:'local',owner:'other'},{data:tmp,store});
+ const previous=process.env.H5P_MCP_SVG_CONTENT_TARGETS;
+ delete process.env.H5P_MCP_SVG_CONTENT_TARGETS;
+ try{
+  await compilerFixture(tmp);
+  const file=path.join(tmp,'figure.svg');
+  const vector=process.env.H5P_TEST_SVG_FILE?await fs.readFile(process.env.H5P_TEST_SVG_FILE):
+   Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="50pt" height="20pt" viewBox="0 0 50 20"><path d="M1 1L49 19" stroke="#000000"/></svg>');
+  await fs.writeFile(file,vector);
+  const upload=async()=> (await host.call('upload_h5p_asset',{path:file,mime:'image/svg+xml'})).structuredContent;
+  const asset=await upload();expect(asset.kind).toBe('asset');
+  const resource=(await host.readResource(asset.uri)).contents[0];
+  expect(resource.mimeType).toBe('image/svg+xml');expect(Buffer.from(resource.blob,'base64')).toEqual(vector);
+  await expect(other.readResource(asset.uri)).rejects.toMatchObject({code:'OBJECT_NOT_FOUND'});
+  await fs.writeFile(file,vector.toString().replace('</svg>','<script/></svg>'));
+  expect((await upload()).ok).toBe(false);
+  await fs.writeFile(file,vector);
+  const vault=await host.vault();
+  const source:Native={...multiChoice(),image:{id:'curve',asset:'curve',mime:'image/svg+xml',alt:'Curve',copyright:{author:'Teacher',license:'CC BY'},library:pin('H5P.Image 1.1')},assets:{curve:asset.object_id}};
+  if(process.env.H5P_TEST_SVG_FILE){
+   const example=JSON.parse(await fs.readFile(new URL('../../examples/scientific-figures/motion-question.json',import.meta.url),'utf8'));
+   Object.assign(source,example,{image:{...example.image,mime:'image/svg+xml'},assets:{grafica:asset.object_id}});
+  }
+  const prepared=await vault.prepare(source,86400000,undefined,undefined,true);
+  const profile=await vault.target({core:{major:1,minor:28},inventory_at:new Date().toISOString(),can_install:true,libraries:[]});
+  await expect(vault.export(prepared.id,'no-target')).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+  await expect(vault.export(prepared.id,'default',profile.id)).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+  process.env.H5P_MCP_SVG_CONTENT_TARGETS=profile.id;
+  const artifact=await vault.export(prepared.id,'vector',profile.id),filename=path.join(artifact.root,'payload');
+  expect(artifact.metadata.target.svg_target_profile_id).toBe(profile.id);
+  const libraries=path.join(tmp,'libraries');
+  await expect(validatePackage(filename,libraries)).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+  expect((await validatePackage(filename,libraries,true)).ok).toBe(true);
+  const imported=await vault.upload('package','application/zip',(await import('node:fs')).createReadStream(filename));
+  const validate=async(target?:string)=>(await host.call('validate_stored_h5p_package',{object_id:imported.id,...(target?{target_profile_id:target}:{})})).structuredContent;
+  expect((await validate()).ok).toBe(false);
+  expect((await validate(profile.id)).ok).toBe(true);
+  const zip=await createRequire(import.meta.url)('yauzl-promise').open(filename);
+  try{
+   const expected='media/'+asset.sha256+'.svg';let embedded=false,routed=false;
+   for await(const entry of zip){
+    if(!['content/content.json','content/'+expected].includes(entry.filename))continue;
+    const bufs=[];for await(const chunk of await entry.openReadStream())bufs.push(chunk);
+    const bytes=Buffer.concat(bufs);
+    if(entry.filename==='content/'+expected){expect(bytes).toEqual(vector);embedded=true;}
+    else{expect(JSON.parse(bytes.toString()).media.type.params.file).toMatchObject({path:expected,mime:'image/svg+xml'});routed=true;}
+   }
+   expect(embedded&&routed).toBe(true);
+  }finally{await zip.close();}
+  if(process.env.H5P_TEST_SVG_EXPORT)await fs.copyFile(filename,process.env.H5P_TEST_SVG_EXPORT);
+  delete process.env.H5P_MCP_SVG_CONTENT_TARGETS;
+  await expect(vault.export(prepared.id,'vector',profile.id)).rejects.toMatchObject({code:'TARGET_INCOMPATIBLE'});
+ }finally{
+  if(previous===undefined)delete process.env.H5P_MCP_SVG_CONTENT_TARGETS;else process.env.H5P_MCP_SVG_CONTENT_TARGETS=previous;
+  await host.close();await other.close();await fs.rm(tmp,{recursive:true,force:true});
+ }
+},120000);

@@ -15,6 +15,7 @@
     "BACKEND_ERROR": "BACKEND_UNAVAILABLE"
   },
   "codes": {
+    "RENDERER_UNAVAILABLE": [false, "The optional figure renderer is unavailable.", "Run h5p-mcp figure status on the host and configure the compiler and package profile."],
     "PERMISSION_DENIED": [
       false,
       "The operation is not authorized by the host.",
@@ -82,8 +83,8 @@
     ],
     "TARGET_INCOMPATIBLE": [
       false,
-      "The library is incompatible with the target.",
-      "Select a runnable library compatible with the configured H5P Core."
+      "The destination does not support the requested libraries or content media.",
+      "Check the target library inventory. For SVG content use a host-approved target profile or provide a PNG."
     ],
     "BACKEND_UNAVAILABLE": [
       false,

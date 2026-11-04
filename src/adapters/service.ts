@@ -1,3 +1,6 @@
+import {svgMime,svgBytes,validateStaticSvg} from '../domain/static-svg.js';
+import {randomUUID} from 'node:crypto';
+import {Pool} from '../infrastructure/pool.js';
 import {feedback} from './feedback.js';
 import {descriptions} from './descriptions.js';
 import fs from 'node:fs/promises';
@@ -23,8 +26,13 @@ async function resolved(filename:string):Promise<string> {
  }
 }
 export class Service {
+ private readonly figurePool=new Pool(2,4);
  private vaultPromise?:Promise<Vault>;
  constructor(private readonly principal:Principal={tenant:'local',owner:'local'},options:{data?:string;store?:string;immutable?:boolean;adminScopes?:string[]}={}){
+  if(process.env.H5P_MCP_TYPST_ENABLED==='1')
+   this.definitions.render_force_figure=operations.optionalFigures.render_force_figure;
+  if(process.env.H5P_MCP_TYPST_ENABLED==='1' && process.env.H5P_MCP_TYPST_SANDBOX==='docker')
+   this.definitions.render_typst_figure=operations.optionalFigures.render_typst_figure;
   this.principal=Object.freeze({...principal});
   if(options.data)this.data=options.data;
   this.store=options.store||path.resolve(process.env.H5P_MCP_STORE_DIR||path.join(this.data,'objects'));
@@ -51,10 +59,33 @@ export class Service {
   if(value.metadata.library_snapshot_id)result.library_snapshot_id=value.metadata.library_snapshot_id;
   if(value.files.payload)Object.assign(result,{mime_type:value.metadata.mime,size:value.files.payload.size,sha256:value.files.payload.sha256});
   if(value.metadata.feedback)Object.assign(result,value.metadata.feedback);
+  if(value.kind==='asset'&&value.metadata.mime===svgMime)result.uri='h5p-figure://svg/'+value.id;
   if(value.kind==='artifact')Object.assign(result,{uri:'h5p-artifact://stored/'+value.id,target:value.metadata.target,verification:verification({structure:'passed',semantics:'passed'})});
   return result;
  }
  async readResource(uri:string):Promise<Native> {
+  if(uri.startsWith('h5p-figure://svg/')){
+   const id=uri.slice('h5p-figure://svg/'.length),vault=await this.vault(),asset=await vault.objects.get(id,'asset');
+   if(asset.metadata.mime!==svgMime)throw failure('MIME_MISMATCH');
+   if(asset.files.payload.size>Math.min(svgBytes,limit('RESOURCE_BYTES',16777216)))throw failure('LIMIT_EXCEEDED');
+   const bytes=await vault.objects.read(id,'asset');validateStaticSvg(bytes);
+   return {contents:[{uri,mimeType:svgMime,blob:bytes.toString('base64')}]};
+  }
+  if(uri.startsWith('h5p-figure://source/')){
+   const id=uri.slice('h5p-figure://source/'.length),vault=await this.vault();
+   const asset=await vault.objects.get(id,'asset'),file=asset.files['figure.typ'];
+   if(!file)throw failure('OBJECT_NOT_FOUND');
+   if(file.size>Math.min(65536,limit('RESOURCE_BYTES',16777216)))throw failure('LIMIT_EXCEEDED');
+   const bytes=await vault.objects.read(id,'asset','figure.typ');
+   return {contents:[{uri,mimeType:'text/plain',text:bytes.toString('utf8')}]};
+  }
+  if(uri.startsWith('h5p-figure://asset/')){
+   const id=uri.slice('h5p-figure://asset/'.length),vault=await this.vault();
+   const asset=await vault.objects.get(id,'asset');
+   if(asset.metadata.mime!=='image/png')throw failure('MIME_MISMATCH');
+   if(asset.files.payload.size>limit('RESOURCE_BYTES',16777216))throw failure('LIMIT_EXCEEDED');
+   return {contents:[{uri,mimeType:'image/png',blob:(await vault.objects.read(id,'asset')).toString('base64')}]};
+  }
   if(!uri.startsWith('h5p-artifact://stored/'))return this.resources.read(uri);
   const vault=await this.vault(),id=uri.slice('h5p-artifact://stored/'.length),value=await vault.objects.get(id,'artifact');
   if(value.files.payload.size>limit('RESOURCE_BYTES',16777216))throw failure('LIMIT_EXCEEDED');
@@ -124,6 +155,25 @@ export class Service {
  }
  async dispatch(name:string,args:Native,signal:AbortSignal):Promise<Native> {
   if(!this.allowed(name)) throw failure('PERMISSION_DENIED');
+  if((name==='render_force_figure'||name==='render_typst_figure') && Object.hasOwn(this.definitions,name)){
+   return this.figurePool.run(async()=>{
+    const {renderForceSpec}=await import('../infrastructure/typst-figure.js');
+    const parent=await this.authorize(this.exportDir,'EXPORT');await fs.mkdir(parent,{recursive:true});
+    const directory=await this.authorize(path.join(parent,'figure-'+randomUUID()),'EXPORT');
+    const figure=name==='render_typst_figure'
+     ?await (await import('../infrastructure/typst-sandbox.js')).renderTypstFigure(args,directory,signal)
+     :await renderForceSpec(args,directory,signal);
+    try{
+     const asset=await (await this.vault()).upload('asset','image/png',createReadStream(path.join(directory,'figure.png')),86400000,signal,name==='render_typst_figure'?args.source:undefined);
+     return {ok:true,directory,manifest:figure.manifest,asset_id:asset.id,
+      ...(asset.files['figure.typ']?{source:{uri:'h5p-figure://source/'+asset.id,mime_type:'text/plain',sha256:asset.files['figure.typ'].sha256}}:{}),
+      preview:{uri:'h5p-figure://asset/'+asset.id,mime_type:'image/png',sha256:asset.files.payload.sha256}};
+    }catch(error){
+     for(const name of [...Object.keys(figure.manifest.hashes),'manifest.json'])await fs.unlink(path.join(directory,name));
+     await fs.rmdir(directory);throw error;
+    }
+   },signal);
+  }
   if(Object.hasOwn(storage.local,name)) {
    const vault=await this.vault(),ttl=(args.ttl_seconds||86400)*1000;
    if(name==='upload_h5p_asset'||name==='upload_h5p_package') {
@@ -138,7 +188,7 @@ export class Service {
    if(name==='revoke_stored_h5p_object'){await vault.objects.revoke(args.object_id);return {revoked:true};}
    if(name==='capture_h5p_library_snapshot')return this.stored(await vault.snapshot(true,signal));
    if(name==='activate_h5p_library_snapshot'){await vault.objects.activate('libraries',args.object_id);return this.stored(await vault.objects.get(args.object_id,'libraries'));}
-   if(name==='validate_stored_h5p_package'){return this.packageReport(await vault.validate(args.object_id,signal),args.target_profile_id);}
+   if(name==='validate_stored_h5p_package'){return this.packageReport(await vault.validate(args.object_id,signal,args.target_profile_id),args.target_profile_id);}
   }
   if(name==='search_h5p_types'||name==='refresh_h5p_catalog') return this.run('discover',{query:'',installed_only:false,offset:0,limit:20,...args,refresh:name==='refresh_h5p_catalog'},signal);
   if(name==='get_h5p_type_contract'||name==='install_h5p_library') {
@@ -170,7 +220,7 @@ export class Service {
   }
   if(name==='validate_h5p_package') {
    const filename=await this.authorize(args.path,'PACKAGE');
-   return this.packageReport(await this.run('validate',{path:filename},signal),args.target_profile_id);
+   return this.packageReport(await this.run('validate',{path:filename,allow_svg_content:args.target_profile_id?await (await this.vault()).permitsSvg(args.target_profile_id):false},signal),args.target_profile_id);
   }
   if(name==='export_h5p_activity') {
    const destination=await this.destination(args.output_name);
@@ -194,7 +244,7 @@ export class Service {
  async call(name:string,args:Native,signal:AbortSignal=AbortSignal.timeout(limit('SECONDS',300)*1000)):Promise<Native> {
   if(Object.hasOwn(aliases,name)) return this.legacy(name,args,signal);
   const definition=this.definitions[name];
-  let result:Native;
+  let result:Native,compilerDiagnostic:string|undefined;
   try {
    checkTree(args);
    if(!definition) throw failure('SCHEMA_VALIDATION_FAILED');
@@ -205,12 +255,15 @@ export class Service {
    if(Buffer.byteLength(JSON.stringify(result))>limit('OUTPUT_BYTES',16777216)) throw failure('LIMIT_EXCEEDED');
   } catch(error:Native) {
    const code=['TimeoutError','AbortError'].includes(error.name)?'BACKEND_TIMEOUT':error.code==='EEXIST'?'OUTPUT_ALREADY_EXISTS':error.code==='ENOENT'?'ASSET_NOT_FOUND':['EACCES','EPERM'].includes(error.code)?'PERMISSION_DENIED':error.code;
+   if(name==='render_typst_figure' && typeof error.compilerDiagnostic==='string')compilerDiagnostic=error.compilerDiagnostic;
    const item=diagnostic({...error,code});
    const validation=['SCHEMA_VALIDATION_FAILED','LIBRARY_NOT_INSTALLED','LIBRARY_VERSION_MISMATCH','UNSAFE_ARCHIVE','STALE_PREPARATION','ASSET_NOT_FOUND','MIME_MISMATCH'].includes(item.code);
    result={...report(validation?'validation':'operational_error',false,validation&&Array.isArray(error.details)?error.details:[item]),...feedback(error.feedback)};
    if(name==='prepare_h5p_activity') result.activity=null;
   }
   const content:Native[]=[{type:'text',text:JSON.stringify(result)}];
+  if(compilerDiagnostic)content.push({type:'text',text:compilerDiagnostic});
+  if((name==='render_force_figure'||name==='render_typst_figure') && result.ok)content.push({type:'resource_link',uri:result.preview.uri,name:'Figure preview',mimeType:'image/png'});
   if(result.artifact) content.push({type:'resource_link',uri:result.artifact.uri,name:'H5P package',mimeType:'application/zip',size:result.artifact.size});
   if(result.kind==='artifact'&&result.uri)content.push({type:'resource_link',uri:result.uri,name:'Stored H5P package',mimeType:'application/zip',size:result.size});
   return {content,structuredContent:result,isError:result.kind==='operational_error'};
