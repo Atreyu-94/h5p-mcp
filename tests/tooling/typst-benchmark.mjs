@@ -24,6 +24,7 @@ const millis=start=>Math.round(performance.now()-start);
 const exampleDir=new URL('../../examples/scientific-figures/',import.meta.url);
 const cases=JSON.parse(await fs.readFile(new URL('learner-es.json',exampleDir),'utf8'));
 for(const item of cases)item.source=await fs.readFile(new URL(item.file,exampleDir),'utf8');
+const imageProfile=env.H5P_MCP_TYPST_IMAGE_PROFILE?JSON.parse(await fs.readFile(env.H5P_MCP_TYPST_IMAGE_PROFILE,'utf8')):null;
 const rounds=30;
 const save=async(file,value)=>fs.writeFile(path.join(output,file),JSON.stringify(value,null,2)+'\n');
 const append=async(file,value)=>fs.appendFile(path.join(output,file),JSON.stringify(value)+'\n');
@@ -64,7 +65,10 @@ async function render(client,item,phase,round){
    sample[format+'Hash']=sha(bytes);
    assert.equal(sample[format+'Hash'],figure.manifest.hashes[name]);
   }
-  if(env.H5P_MCP_TYPST_RASTER_DIR)assert.equal(figure.manifest.renderPolicy,'offline-resvg-oxipng-v1');
+  if(imageProfile){
+   assert.equal(figure.manifest.renderPolicy,imageProfile.policy);
+   assert.deepEqual(figure.manifest.images,imageProfile.images);
+  }else if(env.H5P_MCP_TYPST_RASTER_DIR)assert.equal(figure.manifest.renderPolicy,'offline-resvg-oxipng-v1');
   const pair=sample.svgHash+':'+sample.pngHash;
   if(imageHashes.has(item.file))assert.equal(pair,imageHashes.get(item.file));
   imageHashes.set(item.file,pair);

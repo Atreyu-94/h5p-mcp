@@ -19,12 +19,15 @@ try {
     const {installCompiler,removeCompiler}=await import('./infrastructure/typst-compiler.js');
     console.log(JSON.stringify(args[0]==='remove'?await removeCompiler(controller.signal):await installCompiler(controller.signal,args[0]==='repair')));
    }
-   else if((args.length===2 && ['setup','raster-setup'].includes(args[0]))||(args.length===3 && ['force','rebuild'].includes(args[0]))){
+   else if((args.length===2 && ['setup','raster-setup','image-setup'].includes(args[0]))||(args.length===3 && ['force','rebuild'].includes(args[0]))){
     const service=new Service();
     try{
      await service.initialize();
      const output=await service.authorize(path.resolve(args.at(-1)!),'EXPORT');
-     if(args[0]==='raster-setup'){
+     if(args[0]==='image-setup'){
+      const {setupImages}=await import('./infrastructure/typst-images.js');
+      console.log(JSON.stringify(await setupImages(output,controller.signal)));
+     }else if(args[0]==='raster-setup'){
       const {setupDockerRaster}=await import('./infrastructure/typst-sandbox.js');
       console.log(JSON.stringify(await setupDockerRaster(output,controller.signal)));
      }else if(args[0]==='setup'){
@@ -41,14 +44,14 @@ try {
       const {renderTypstFigure,checkFigureProject}=await import('./infrastructure/typst-sandbox.js');
       const lockedProfile=checkFigureProject(manifest);
       const source=await input('figure.typ',65536);
-      console.log(JSON.stringify(await renderTypstFigure({source,alt:manifest.image?.alt},output,controller.signal,lockedProfile,manifest.renderPolicy)));
+      console.log(JSON.stringify(await renderTypstFigure({source,alt:manifest.image?.alt},output,controller.signal,lockedProfile,manifest.renderPolicy,manifest.images)));
      }else{
       const input=await service.authorize(path.resolve(args[1]),'ASSET');
       console.log(JSON.stringify(await renderForceFigure(input,output,controller.signal)));
      }
     }finally{await service.close();}
    }
-   else throw new Error('Use figure status, figure install|repair|remove, figure raster-setup <new-tool-root> | figure setup <new-package-root> or figure force <spec.json> <new-directory> | figure rebuild <figure-project> <new-directory>');
+   else throw new Error('Use figure status, figure install|repair|remove, figure image-setup <new-profile.json> | figure raster-setup <new-tool-root> | figure setup <new-package-root> or figure force <spec.json> <new-directory> | figure rebuild <figure-project> <new-directory>');
   }catch(error){console.error(JSON.stringify({ok:false,error:error instanceof Error?error.message:String(error)}));process.exitCode=1;}
   finally{process.off('SIGINT',abort);process.off('SIGTERM',abort);}
  }
@@ -60,7 +63,7 @@ try {
   let closing=false;const close=async()=>{if(closing)return;closing=true;await app.close();await listener.stop(true);};
   process.once('SIGINT',()=>{void close();});process.once('SIGTERM',()=>{void close();});
  }
- else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json|yaml> | build <source.json|yaml> <output-name> | freeze <source.json|yaml> <new-directory> [--figure <asset-id> <figure-project>] | rebuild <project-directory> <output-name> | figure status | figure install|repair|remove | figure raster-setup <new-tool-root> | figure setup <new-package-root> | figure force <spec.json> <new-directory> | figure rebuild <figure-project> <new-directory> | admin <refresh|install|package> [name|path]');
+ else if(command==='--help'||!command) console.log('h5p-mcp stdio | http <host-config.json> | validate <file.h5p> | export <activity.json> <output-name> | compile/check <source.json|yaml> | build <source.json|yaml> <output-name> | freeze <source.json|yaml> <new-directory> [--figure <asset-id> <figure-project>] | rebuild <project-directory> <output-name> | figure status | figure install|repair|remove | figure image-setup <new-profile.json> | figure raster-setup <new-tool-root> | figure setup <new-package-root> | figure force <spec.json> <new-directory> | figure rebuild <figure-project> <new-directory> | admin <refresh|install|package> [name|path]');
  else {
   const service=new Service();await service.initialize();
   try {

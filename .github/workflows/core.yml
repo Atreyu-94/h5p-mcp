@@ -63,6 +63,12 @@ jobs:
           $env:H5P_MCP_TYPST_RASTER_DIR=Join-Path $env:RUNNER_TEMP 'raster-profile'
           bun dist/core/cli.js figure raster-setup $env:H5P_MCP_TYPST_RASTER_DIR
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:H5P_MCP_TYPST_IMAGE_PROFILE=Join-Path $env:RUNNER_TEMP 'verified-images.json'
+          bun dist/core/cli.js figure image-setup $env:H5P_MCP_TYPST_IMAGE_PROFILE
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $profile=Get-Content $env:H5P_MCP_TYPST_IMAGE_PROFILE -Raw | ConvertFrom-Json
+          $expectedArch=if ($env:RUNNER_ARCH -eq 'ARM64') {'aarch64'} else {'x86_64'}
+          if ($profile.images.arch -ne $expectedArch) { throw "Unexpected image architecture" }
           bun test tests/core/typst-sandbox.test.ts
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           bun test tests/core/compiler.test.ts -t 'portable figure project'
@@ -81,6 +87,7 @@ jobs:
           } finally { Pop-Location }
           node tests/tooling/typst-benchmark.mjs (Get-Command bun).Source (Join-Path $install 'node_modules/h5p-mcp/dist/core/cli.js') (Join-Path $report.artifacts 'data/libraries') typst-m6
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Copy-Item $env:H5P_MCP_TYPST_IMAGE_PROFILE typst-m6/verified-images.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always() && github.event_name == 'workflow_dispatch' && startsWith(matrix.os, 'ubuntu-24.04')
         with:

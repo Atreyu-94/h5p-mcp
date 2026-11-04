@@ -117,6 +117,45 @@ a configured raster profile, new projects use the original direct Typst PNG.
 Clients can read package guidance and editable examples through
 `skill://typst-graphics/SKILL.md` and its declared resources.
 
+To prepare immutable local images, enable the Docker sandbox and set
+`H5P_MCP_TYPST_PACKAGES` and `H5P_MCP_TYPST_RASTER_DIR` to the two verified
+setup directories. Use a local Linux Docker engine with BuildKit and the
+pinned base images shown above. Run:
+
+```sh
+h5p-mcp figure image-setup /absolute/path/to/new-profile.json
+```
+
+Set `H5P_MCP_TYPST_IMAGE_PROFILE` in the stdio server environment to that
+administrator-controlled file. Setup verifies the scientific package trees and
+the two executables for the engine architecture before building. Both images
+are tagged locally. Rendering starts two fresh containers by immutable image
+ID and mounts only the current input read-only. Each new figure records both
+IDs and the engine architecture in its editable manifest. Keep the profile
+and its images with the deployment. To repair a pruned installation, repeat
+setup into a new file and compare both IDs before selecting it. A project
+requiring different IDs or another architecture fails explicitly. Portable
+activity rebuilds using the captured PNG still work without a renderer.
+For earlier direct or SVG-derived projects, retain the package and raster
+directories their original rendering method requires.
+On Windows, a stdio client can launch a Linux installation of the MCP through
+WSL2. Enable Docker Desktop integration for that distribution and verify
+`docker --host unix:///var/run/docker.sock info` there. Install Linux Bun and
+the MCP in the distribution. Run both figure setup commands there and use
+Linux paths for the package profile, raster profile, temporary files and
+store. Keep these working directories on the WSL filesystem; a path under
+`/mnt/c` or `/mnt/d` crosses the Windows filesystem boundary for each small
+package file. Exported files are accessible from Windows through
+`\\wsl.localhost\Ubuntu\`. The Windows client can launch `wsl.exe` with these
+example arguments (substitute the Linux executable and profile paths):
+
+```text
+-d Ubuntu --cd /home/teacher --exec env H5P_MCP_TYPST_ENABLED=1 H5P_MCP_TYPST_SANDBOX=docker H5P_MCP_TYPST_PACKAGES=/home/teacher/figures/packages H5P_MCP_TYPST_RASTER_DIR=/home/teacher/figures/raster /home/teacher/.bun/bin/bun /home/teacher/h5p/node_modules/h5p-mcp/dist/core/cli.js stdio
+```
+
+The Linux MCP checks resource limits through the local Docker socket on each
+request. Both rendering stages still run in fresh isolated containers.
+
 The general tool also returns a text resource at `source.uri` scoped to the same
 owner and expiration as the PNG. Copy the local figure directory for durable
 editing. To capture a figure with an activity, use the asset key from its JSON

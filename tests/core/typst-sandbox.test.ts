@@ -7,6 +7,7 @@ import {Service} from '../../src/adapters/service.js';
 import {originalProfile,profile} from '../../src/infrastructure/typst-profile.js';
 import {checkFigureProject,sandboxImage,renderTypstFigure} from '../../src/infrastructure/typst-sandbox.js';
 
+import {imagePolicy} from '../../src/infrastructure/typst-images.js';
 import {rasterLock,rasterPolicy} from '../../src/infrastructure/typst-raster.js';
 
 const dockerTest=test.skipIf(process.env.H5P_TEST_TYPST_DOCKER!=='1');
@@ -24,6 +25,12 @@ test('editable projects accept either exact package lock and reject mixed or alt
   const rasterizer=rasterLock(arch);
   const project={...manifest,packages:profile,renderPolicy:rasterPolicy,rasterizer};
   expect(checkFigureProject(project)).toEqual(profile);
+  const images={arch,compiler:'sha256:'+'1'.repeat(64),raster:'sha256:'+'2'.repeat(64)};
+  const layered={...project,renderPolicy:imagePolicy,images};
+  expect(checkFigureProject(layered)).toEqual(profile);
+  expect(()=>checkFigureProject({...layered,images:{...images,compiler:'latest'}})).toThrow();
+  expect(()=>checkFigureProject({...layered,images:{...images,arch:'other'}})).toThrow();
+  expect(()=>checkFigureProject({...layered,renderPolicy:rasterPolicy})).toThrow();
   expect(()=>checkFigureProject({...project,rasterizer:{...rasterizer,resvgSha256:'altered'}})).toThrow();
   expect(()=>checkFigureProject({...project,renderPolicy:undefined})).toThrow();
  }
@@ -72,6 +79,16 @@ dockerTest('rebuilds retain direct and SVG-derived render policies on a configur
    expect(!!manifest.rasterizer).toBe(policy===rasterPolicy);
    const rebuilt=await renderTypstFigure(input,path.join(work,'rebuilt-'+String(policy)),undefined,checkFigureProject(manifest),manifest.renderPolicy);
    expect(rebuilt.manifest.hashes).toEqual(manifest.hashes);
+  }
+  if(process.env.H5P_MCP_TYPST_IMAGE_PROFILE){
+   const first=await renderTypstFigure(input,path.join(work,'layered'));
+   const manifest=first.manifest;
+   expect(manifest.renderPolicy).toBe(imagePolicy);
+   const rebuilt=await renderTypstFigure(input,path.join(work,'layered-copy'),undefined,checkFigureProject(manifest),imagePolicy,manifest.images);
+   expect(rebuilt.manifest).toEqual(manifest);
+   const unknown={...manifest.images,compiler:'sha256:'+'0'.repeat(64)};
+   await expect(renderTypstFigure(input,path.join(work,'denied'),undefined,profile,imagePolicy,unknown)).rejects.toThrow(/does not match/);
+   expect(await fs.exists(path.join(work,'denied'))).toBe(false);
   }
  }finally{await fs.rm(work,{recursive:true,force:true});}
 },120000);
