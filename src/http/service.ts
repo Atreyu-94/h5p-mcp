@@ -4,6 +4,11 @@ import {Service} from '../adapters/service.js';
 import {storage,operations,failure} from '../adapters/contracts.js';
 import type {Native} from '../domain/types.js';
 import type {HttpConfig,Identity} from './auth.js';
+import {limit} from '../domain/limits.js';
+
+export const rpcRequestBytes=1048576,rpcResponseBytes=16777216;
+// Reserve space for an echoed JSON-RPC id (bounded by the request) and JSON/SSE framing.
+const inlineArtifactBytes=3*Math.floor((rpcResponseBytes-rpcRequestBytes-4096)/4);
 
 export const requirements:Record<string,string>={
  search_h5p_types:'h5p:read',get_h5p_type_contract:'h5p:read',
@@ -19,7 +24,7 @@ export class Remote extends Service {
   search_h5p_types:operations.local.search_h5p_types,get_h5p_type_contract:operations.local.get_h5p_type_contract,
   install_h5p_library_package:['stored_id_input','install_output']
  };
- constructor(readonly identity:Identity,settings:HttpConfig) {
+ constructor(readonly identity:Identity,private readonly settings:HttpConfig) {
   super(identity.extra.principal,{data:path.join(settings.data,identity.extra.principal.tenant),store:settings.store,immutable:settings.immutable,
    adminScopes:identity.scopes.includes('h5p:admin:libraries')?['libraries:install']:[]});
  }
@@ -61,6 +66,14 @@ export class Remote extends Service {
  }
  override async readResource(uri:string) {
   this.require('h5p:read');
+  if(uri.startsWith('h5p-artifact://stored/')){
+   const id=uri.slice('h5p-artifact://stored/'.length);
+   const size=(await this.vault()).objects.payloadSize(id,'artifact');
+   if(size>Math.min(inlineArtifactBytes,limit('RESOURCE_BYTES',16777216))){
+    const download=new URL('/artifacts/'+id,this.settings.resource);
+    return {contents:[{uri,mimeType:'text/uri-list',text:download.href}]};
+   }
+  }
   if(uri.startsWith('h5p-schema://stored/'))return {contents:[{uri,mimeType:'application/json',text:(await (await this.vault()).objects.read(uri.slice('h5p-schema://stored/'.length),'schema')).toString('utf8')}]};
   if(!uri.startsWith('h5p-artifact://stored/')&&!uri.startsWith('h5p-figure://svg/')&&!this.resources.texts.has(uri))throw failure('OBJECT_NOT_FOUND');
   return super.readResource(uri);

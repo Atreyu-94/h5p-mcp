@@ -1,4 +1,4 @@
-import {test,expect} from 'bun:test';
+import {test,expect,spyOn} from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,6 +33,33 @@ test('HTTP bearer per request, issuer/audience/expiry/type, key rotation, Host a
   await fs.writeFile(f.settings.jwksFile,JSON.stringify({keys:[{...await exportJWK((await generateKeyPair('ES256')).publicKey),kid:'two'}]}));
   expect((await f.request('/mcp',token)).status).toBe(401);
   expect(JSON.stringify(f.logs)).not.toContain(token);expect(JSON.stringify(f.logs)).not.toContain('teacher-a');
+ }finally{await f.close();}
+});
+test('HTTP serves small resources inline and points oversized reads to an authenticated download',async()=>{
+ const f=await fixture();
+ try{
+  const token=await f.token(),other=await f.token({sub:'other'}),principal=(await verifier(f.settings).verifyAccessToken(token)).extra.principal;
+  const store=new Objects(f.settings.store,principal);await store.initialize();
+  try{
+   for(const size of [1024,13*1048576]){
+    const bytes=Buffer.alloc(size,37);
+    const item=await store.publish('artifact',60000,async stage=>{await fs.writeFile(path.join(stage,'payload'),bytes);return {mime:'application/zip'};});
+    const uri='h5p-artifact://stored/'+item.id;
+    const read=async(access:string)=>{
+     const result=await f.request('/mcp',access,{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'resources/read',params:{uri}})});
+     expect(result.status).toBe(200);const body=await result.text();
+     return JSON.parse(body.startsWith('event:')?body.split('\n').find(line=>line.startsWith('data:'))!.slice(5):body);
+    };
+    if(size===1024){expect((await read(token)).result.contents[0].blob).toBe(bytes.toString('base64'));continue;}
+    const get=spyOn(Objects.prototype,'get');
+    try{
+     expect((await read(token)).result.contents[0]).toEqual({uri,mimeType:'text/uri-list',text:'http://127.0.0.1:3000/artifacts/'+item.id});
+     expect((await read(other)).error).toBeDefined();expect(get).not.toHaveBeenCalled();
+    }finally{get.mockRestore();}
+    const response=await f.request('/artifacts/'+item.id,token);
+    expect(response.status).toBe(200);expect(Buffer.from(await response.arrayBuffer()).equals(bytes)).toBe(true);
+   }
+  }finally{store.close();}
  }finally{await f.close();}
 });
 test('remote uploads and downloads enforce scopes, ownership, signatures and path-free tools',async()=>{

@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {mcp} from '../adapters/mcp.js';
 import {checkTree} from '../domain/limits.js';
 import {Pool} from '../infrastructure/pool.js';
-import {Remote,requirements} from './service.js';
+import {Remote,requirements,rpcRequestBytes,rpcResponseBytes} from './service.js';
 import {Admission,Busy} from './admission.js';
 import {config,verifier,scopes,type HttpConfig,type Identity} from './auth.js';
 import type {Native} from '../domain/types.js';
@@ -54,7 +54,7 @@ export function http(input:HttpConfig,log:(entry:Native)=>void=entry=>console.er
       let parsedBody:Native;
       if(request.method==='POST') {
        if(request.headers.get('content-type')?.split(';')[0].trim()!=='application/json')return json({error:'unsupported_media_type'},415);
-       const data=await bytes(request.body,1048576,signal,n=>received+=n);
+       const data=await bytes(request.body,rpcRequestBytes,signal,n=>received+=n);
        try{parsedBody=JSON.parse(data.toString('utf8'));checkTree(parsedBody);}catch{return json({error:'invalid_json'},400);}
        // One bounded operation, no hidden batches or unnegotiated asynchronous tasks.
        if(Array.isArray(parsedBody)||!parsedBody||typeof parsedBody!=='object')return json({error:'invalid_request'},400);
@@ -66,8 +66,10 @@ export function http(input:HttpConfig,log:(entry:Native)=>void=entry=>console.er
       handler=createMcpHandler(()=>mcp(service,signal,jobs),{legacy:'stateless',responseMode:'auto',maxSubscriptions:0,onerror:()=>{}});
       const result=await handler.fetch(request,{authInfo:identity,parsedBody});
       // Drain the bounded legacy SSE result too, before closing request-owned resources.
-      const payload=result.body?await bytes(result.body,16777216,signal):null;
-      return new Response(payload,{status:result.status,headers:result.headers});
+      try{
+       const payload=result.body?await bytes(result.body,rpcResponseBytes,signal):null;
+       return new Response(payload,{status:result.status,headers:result.headers});
+      }catch(error){if(error instanceof BodyLimit)return json({error:'response_too_large'},500);throw error;}
      }
      if(url.pathname.startsWith('/uploads/')) {
       if(request.method!=='POST')return json({error:'method_not_allowed'},405);

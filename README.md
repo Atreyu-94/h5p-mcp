@@ -522,7 +522,11 @@ Binary resource reads verify size/digest and default to 16 MiB of raw package
 bytes (`H5P_MCP_MAX_RESOURCE_BYTES`) for both local and persistent artifacts,
 independently of `H5P_MCP_MAX_OUTPUT_BYTES`. Base64 adds transport overhead;
 Stdio clients must allow the base64 envelope too (the harness uses a 32 MiB receive buffer for the 16 MiB raw limit). HTTP also caps the full MCP response at 16 MiB. Use the authenticated
-`/artifacts/<object_id>` route for large remote artifacts.
+`/artifacts/<object_id>` route for large remote artifacts. When an artifact exceeds
+the inline budget, HTTP `resources/read` returns `text/uri-list` containing that
+download URL. Send the same bearer credentials to download it. The inline budget
+accounts for base64 expansion and reserves space for the request ID and JSON/SSE
+framing before reading the binary payload.
 
 The local registry retains 128 artifacts by default (`H5P_MCP_MAX_ARTIFACTS`).
 Eviction/restart invalidates their IDs without deleting exported files. The
