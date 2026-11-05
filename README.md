@@ -341,7 +341,7 @@ For a standalone local tarball, run `bun tests/tooling/pack.mjs C:/output`
 after building, then:
 
 ```powershell
-bun x --bun --package C:/output/h5p-mcp-0.1.0.tgz h5p-mcp stdio
+bun x --bun --package C:/output/h5p-mcp-0.2.0.tgz h5p-mcp stdio
 ```
 
 The package is private and has not been published to npm. Both bin names,

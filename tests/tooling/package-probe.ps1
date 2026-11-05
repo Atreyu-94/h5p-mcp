@@ -8,7 +8,8 @@ $probeRoot=Join-Path ([IO.Path]::GetTempPath()) ('h5p-package-probe-'+[guid]::Ne
 New-Item -ItemType Directory $probeRoot | Out-Null
 & $Bun (Join-Path $PSScriptRoot 'pack.mjs') $probeRoot
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
-$tarball=Join-Path $probeRoot 'h5p-mcp-0.1.0.tgz'
+$version=(Get-Content (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json).version
+$tarball=Join-Path $probeRoot ('h5p-mcp-'+$version+'.tgz')
 Set-Content -LiteralPath (Join-Path $probeRoot 'package.json') -Value '{"private":true}'
 $previousCache=$env:BUN_INSTALL_CACHE_DIR
 try {

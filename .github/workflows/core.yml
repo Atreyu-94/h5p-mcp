@@ -82,7 +82,8 @@ jobs:
           Push-Location $install
           try {
             Set-Content package.json '{"private":true}'
-            bun add --backend=copyfile --ignore-scripts ./h5p-mcp-0.1.0.tgz
+            $tarball=(Get-ChildItem -LiteralPath $install -Filter 'h5p-mcp-*.tgz').FullName
+            bun add --backend=copyfile --ignore-scripts $tarball
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           } finally { Pop-Location }
           node tests/tooling/typst-benchmark.mjs (Get-Command bun).Source (Join-Path $install 'node_modules/h5p-mcp/dist/core/cli.js') (Join-Path $report.artifacts 'data/libraries') typst-m6
