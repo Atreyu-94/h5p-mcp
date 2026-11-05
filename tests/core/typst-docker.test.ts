@@ -29,4 +29,4 @@ test.skipIf(process.platform!=='win32'||process.env.H5P_TEST_TYPST_DOCKER!=='1')
   expect(bytes.toString()).toBe('exact bytes');
   await expect(dockerPath(path.join(root,'comma,name'))).rejects.toThrow('Unsupported Docker mount path');
  }finally{await fs.rm(root,{recursive:true,force:true});}
-});
+},60000);
