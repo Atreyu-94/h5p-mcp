@@ -163,7 +163,7 @@ export class Objects {
  async collect() {
   const expired=this.db.transaction(()=>{
    const rows=this.db.query("SELECT id FROM objects WHERE (state='staging' AND lease<=?) OR (state='ready' AND expires<=?) OR state IN ('failed','deleted','expired')").all(this.now(),this.now()) as Array<{id:string}>;
-   for(const {id} of rows)this.db.query("UPDATE objects SET state=CASE WHEN state='staging' THEN 'failed' WHEN state='ready' THEN 'expired' ELSE state END,bytes=0 WHERE id=?").run(id);
+   for(const {id} of rows)this.db.query("UPDATE objects SET state=CASE WHEN state='staging' THEN 'failed' WHEN state='ready' THEN 'expired' ELSE state END,expires=CASE WHEN state='staging' THEN ? ELSE expires END,bytes=0 WHERE id=?").run(this.now(),id);
    return rows;
   }).immediate();
   for(const {id} of expired) for(const suffix of ['', '.staging']) await fs.rm(path.join(this.root,'objects',id+suffix),{recursive:true,force:true});

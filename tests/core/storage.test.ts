@@ -58,13 +58,36 @@ test('crash between rename and SQLite commit leaves no readable partial object',
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-crash-'));
  try {
   const module=new URL('../../src/storage/objects.ts',import.meta.url).href;
-  const code=`import fs from 'node:fs/promises';import path from 'node:path';import {Objects,digest} from ${JSON.stringify(module)};const store=new Objects(process.argv[1],{tenant:'school-a',owner:'teacher-a'});await store.initialize();const rename=fs.rename;fs.rename=async(...args)=>{await rename(...args);process.exit(19);};await store.publish('artifact',100000,async(stage)=>{await fs.writeFile(path.join(stage,'payload'),'complete');return {};},{key:'crash',digest:digest('same')});`;
+  const code=`import fs from 'node:fs/promises';import path from 'node:path';import {Objects,digest} from ${JSON.stringify(module)};const store=new Objects(process.argv[1],{tenant:'school-a',owner:'teacher-a'});await store.initialize();const rename=fs.rename;fs.rename=async(...args)=>{await rename(...args);process.exit(19);};await store.publish('artifact',7*86400000,async(stage)=>{await fs.writeFile(path.join(stage,'payload'),'complete');return {};},{key:'crash',digest:digest('same')});`;
   expect(spawnSync(process.execPath,['-e',code,root],{timeout:10000}).status).toBe(19);
   const db=new Database(path.join(root,'index.sqlite'));db.exec('UPDATE objects SET lease=0');db.close();
-  const recovered=new Objects(root,principal);await recovered.initialize();
-  try{expect(recovered.list('artifact')).toEqual([]);expect(await fs.readdir(path.join(root,'objects'))).toEqual([]);const final=await recovered.publish('artifact',10000,writer,{key:'crash',digest:digest('same')});expect((await recovered.read(final.id,'artifact')).toString()).toBe('complete');}
+  let now=Date.now();
+  const recovered=new Objects(root,principal,()=>now,{count:2,bytes:1024,tenantBytes:2048,seconds:2});await recovered.initialize();
+  try{expect(recovered.list('artifact')).toEqual([]);expect(await fs.readdir(path.join(root,'objects'))).toEqual([]);const final=await recovered.publish('artifact',7*86400000,writer,{key:'crash',digest:digest('same')});expect((await recovered.read(final.id,'artifact')).toString()).toBe('complete');
+   await expect(recovered.publish('asset',10000,writer)).rejects.toMatchObject({code:'LIMIT_EXCEEDED'});
+   now+=86400000-1;await recovered.collect();
+   await expect(recovered.publish('asset',10000,writer)).rejects.toMatchObject({code:'LIMIT_EXCEEDED'});
+   now+=2;await recovered.collect();
+   const retried=await recovered.publish('artifact',10000,writer,{key:'crash',digest:digest('same')});
+   expect(retried.id).toBe(final.id);
+   const next=await recovered.publish('asset',10000,writer);
+   expect((await recovered.read(next.id,'asset')).toString()).toBe('complete');
+  }
   finally{recovered.close();}
  }finally{await fs.rm(root,{recursive:true,force:true});}
+});
+test('ordinary publication failure retains its original recovery deadline',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-failure-deadline-'));
+ let now=100;
+ const store=new Objects(root,principal,()=>now,{count:1,bytes:16,tenantBytes:32,seconds:2});
+ try{
+  await store.initialize();
+  await expect(store.publish('artifact',7*86400000,async()=>{throw Error('writer failed');})).rejects.toThrow('writer failed');
+  now+=86400000-1;await store.collect();
+  await expect(store.publish('artifact',1000,writer)).rejects.toMatchObject({code:'LIMIT_EXCEEDED'});
+  now+=1;await store.collect();
+  expect((await store.publish('artifact',1000,writer)).kind).toBe('artifact');
+ }finally{store.close();await fs.rm(root,{recursive:true,force:true});}
 });
 test('stream budgets and MIME reject before publication',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-upload-')),store=new Objects(root,principal,Date.now,{bytes:16,tenantBytes:32,count:20,seconds:2});
@@ -93,7 +116,7 @@ test('reservations bound concurrent staging and retention reclaims tombstones',a
  try {
   await store.initialize();
   const first=store.publish('asset',10000,async(stage)=>{entered();await blocked;return writer(stage);});
-  await started;
+  await started;await store.collect();
   await expect(store.publish('asset',10000,writer)).rejects.toMatchObject({code:'LIMIT_EXCEEDED'});
   release();const object=await first;await store.revoke(object.id);
   now+=86400001;await store.collect();
