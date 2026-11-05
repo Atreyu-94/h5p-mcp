@@ -1,4 +1,4 @@
-import {checkImageLock,configuredImages,endpoint,imagePolicy,sandboxImage,type ImageLock} from './typst-images.js';
+import {checkImageLock,configuredImages,imagePolicy,sandboxImage,type ImageLock} from './typst-images.js';
 import {engineMetadata} from './typst-engine.js';
 import {copyRasterTools,rasterArch,rasterBase,rasterLock,rasterPolicy,setupRaster} from './typst-raster.js';
 import fs from 'node:fs/promises';
@@ -8,7 +8,7 @@ import {randomUUID} from 'node:crypto';
 import type {Native} from '../domain/types.js';
 import {publishFigure} from './typst-figure.js';
 import {renderSinglePage,pixelsPerInch} from './typst-page.js';
-import {runFigureProcess} from './typst-process.js';
+import {runDocker,dockerPath} from './typst-docker.js';
 import {originalProfile,profile,sha,verifyProfile} from './typst-profile.js';
 
 export {sandboxImage} from './typst-images.js';
@@ -37,7 +37,7 @@ export function checkFigureProject(manifest:Native) {
 }
 
 function docker(args:string[],signal?:AbortSignal,maxStdout=65536) {
- return runFigureProcess('docker',['--host',endpoint,...args],signal,{maxStdout,timeoutMs:20000});
+ return runDocker(args,signal,maxStdout);
 }
 
 export async function setupDockerRaster(root:string,signal:AbortSignal){
@@ -68,8 +68,8 @@ async function isolatedPage(root:string,tools:string|undefined,command:string[],
   '--cap-drop','ALL','--security-opt','no-new-privileges','--user','65534:65534',
   '--memory','256m','--memory-swap','256m','--cpus','1','--pids-limit','64',
   '--ulimit','cpu=15:16','--log-driver','none','--workdir','/input',
-  '--mount','type=bind,src='+root+',dst=/input,readonly',
-  ...(tools?['--mount','type=bind,src='+tools+',dst='+(isRaster?'/tools':'/packages')+',readonly']:[]),...command];
+  '--mount','type=bind,src='+await dockerPath(root,signal)+',dst=/input,readonly',
+  ...(tools?['--mount','type=bind,src='+await dockerPath(tools,signal)+',dst='+(isRaster?'/tools':'/packages')+',readonly']:[]),...command];
  signal?.throwIfAborted();
  // Let creation finish before observing cancellation so cleanup always targets an existing ID.
  const id=(await docker(args)).toString().trim();

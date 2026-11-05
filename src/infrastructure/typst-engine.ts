@@ -1,11 +1,22 @@
+import {runDocker} from './typst-docker.js';
 import {request} from 'node:http';
 import type {Native} from '../domain/types.js';
 
 /** The local engine returns metadata only. Figure output stays on the bounded Docker CLI attachment. */
 export async function engineMetadata(route:string,signal?:AbortSignal,method:'GET'|'DELETE'='GET',discard=false):Promise<Native>{
+ if(process.platform==='win32'){
+  let args:string[];
+  if(route==='/info'&&method==='GET')args=['info','--format','{{json .}}'];
+  else if(/^\/images\/[^/]+\/json$/.test(route)&&method==='GET')args=['image','inspect','--format','{{json .}}',decodeURIComponent(route.split('/')[2])];
+  else if(/^\/containers\/[a-f0-9]{64}\/json$/.test(route)&&method==='GET')args=['inspect','--format','{{json .}}',route.split('/')[2]];
+  else if(/^\/containers\/[a-f0-9]{64}\?force=1$/.test(route)&&method==='DELETE')args=['rm','--force',route.split('/')[2].split('?')[0]];
+  else throw new Error('Unsupported Docker metadata operation.');
+  const bytes=await runDocker(args,signal,1024*1024);
+  return discard?undefined:JSON.parse(bytes.toString('utf8'));
+ }
  const timeout=AbortSignal.timeout(20000);
  const bounded=signal?AbortSignal.any([signal,timeout]):timeout;
- const socketPath=process.platform==='win32'?'\\\\.\\pipe\\dockerDesktopLinuxEngine':'/var/run/docker.sock';
+ const socketPath='/var/run/docker.sock';
  try{
   return await new Promise((resolve,reject)=>{
    const req=request({socketPath,path:route,method,signal:bounded},response=>{

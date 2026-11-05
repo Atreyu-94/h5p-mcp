@@ -1,3 +1,4 @@
+import {dockerCommand} from '../../src/infrastructure/typst-docker.js';
 import {execFileSync} from 'node:child_process';
 import {expect,test} from 'bun:test';
 import fs from 'node:fs/promises';
@@ -112,8 +113,7 @@ dockerTest('isolated sources cannot read outside, fetch a package, exhaust host 
 dockerTest('cancelling a running source removes its constrained container',async()=>{
  const work=await fs.mkdtemp(path.join(os.tmpdir(),'typst-abort-'));
  const controller=new AbortController();
- const docker=(args:string[])=>execFileSync('docker',['--host',process.platform==='win32'?
-  'npipe:////./pipe/dockerDesktopLinuxEngine':'unix:///var/run/docker.sock',...args],{encoding:'utf8'}).trim();
+ const docker=(args:string[])=>{const command=dockerCommand(args);return execFileSync(command.executable,command.args,{encoding:'utf8'}).trim();};
  const list=()=>docker(['ps','--filter','name=h5p-typst-','--format','{{.ID}}']).split(/\s+/);
  const previous=new Set(list());
  const request=renderTypstFigure({source:'#let total = range(5000).map(i => range(5000).map(j => calc.sin((i+j)*1rad)).sum()).sum()\n#total',alt:'cancel'},

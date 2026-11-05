@@ -3,12 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {copyRasterTools,rasterArch,rasterBase} from './typst-raster.js';
 import {verifyProfile} from './typst-profile.js';
-import {runFigureProcess} from './typst-process.js';
+import {runDocker,dockerPath} from './typst-docker.js';
 import {readBounded} from './read-bounded.js';
 
 export const imagePolicy='offline-verified-images-v1';
 export const sandboxImage='ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f';
-export const endpoint=process.platform==='win32'?'npipe:////./pipe/dockerDesktopLinuxEngine':'unix:///var/run/docker.sock';
 type Arch=ReturnType<typeof rasterArch>;
 export interface ImageLock {arch:Arch;compiler:string;raster:string}
 const imageId=(value:unknown):value is string=>typeof value==='string'&&/^sha256:[0-9a-f]{64}$/.test(value);
@@ -35,7 +34,7 @@ export async function setupImages(output:string,signal:AbortSignal){
   throw new Error('Enable the local Docker figure sandbox first.');
  const packages=process.env.H5P_MCP_TYPST_PACKAGES;
  if(!packages||!path.isAbsolute(packages))throw new Error('Configure the scientific package profile before image setup.');
- const build=(args:string[])=>runFigureProcess('docker',['--host',endpoint,...args],signal,{timeoutMs:180000,dockerBuild:args[0]==='build'});
+ const build=(args:string[])=>runDocker(args,signal,65536,args[0]==='build');
  const platform=(await build(['info','--format','{{.OSType}} {{.Architecture}}'])).toString().trim().split(' ');
  if(platform[0]!=='linux')throw new Error('A Linux Docker engine is required.');
  const arch=rasterArch(platform[1]);
@@ -57,7 +56,7 @@ export async function setupImages(output:string,signal:AbortSignal){
    const iid=path.join(stage,role+'.id');
    // COPY is the only build step. Executable permissions must also work for Windows build contexts.
    await fs.writeFile(path.join(context,'Dockerfile'),'FROM '+base+'\nCOPY --chown=0:0 --chmod=0555 '+folder+'/ /'+folder+'/\n');
-   await build(['build','--network=none','--pull=false','--build-arg','SOURCE_DATE_EPOCH=0','--iidfile',iid,context]);
+   await build(['build','--network=none','--pull=false','--build-arg','SOURCE_DATE_EPOCH=0','--iidfile',await dockerPath(iid,signal),await dockerPath(context,signal)]);
    const id=(await readBounded(iid,128)).toString().trim();
    if(!imageId(id))throw new Error('Invalid Docker build image identifier.');
    const expected=arch==='aarch64'?'linux/arm64':'linux/amd64';
