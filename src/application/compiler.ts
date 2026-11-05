@@ -68,7 +68,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   params.answers=source.choices.map((choice:Native,i:number)=>{
    const prefix=`/params/answers/${i}`,origin=`/choices/${i}`;sourceMap[prefix]=origin;sourceMap[prefix+'/correct']='/correct_ids';
    const answer:Native={text:text(choice.text,origin+'/text',prefix+'/text'),correct:source.correct_ids.includes(choice.id)};
-   for(const [key,field] of [['selected_feedback','chosenFeedback'],['unselected_feedback','notChosenFeedback']])if(choice[key]){answer.tipsAndFeedback??={};answer.tipsAndFeedback[field]=text(choice[key],origin+'/'+key,prefix+'/tipsAndFeedback/'+field);}
+   for(const [key,field] of [['hint','tip'],['selected_feedback','chosenFeedback'],['unselected_feedback','notChosenFeedback']])if(choice[key]){answer.tipsAndFeedback??={};answer.tipsAndFeedback[field]=text(choice[key],origin+'/'+key,prefix+'/tipsAndFeedback/'+field);}
    return answer;
   });
   Object.assign(params.behaviour,{type:source.mode==='single'?'single':'multi',singlePoint:source.scoring==='all_or_nothing',randomAnswers:normalized.shuffle,passPercentage:100});

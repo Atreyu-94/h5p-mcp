@@ -7,10 +7,10 @@ export interface AuthoringBase {
  feedback?:{correct:AuthorText;incorrect:AuthorText};
  image?:{id:string;asset:string;mime:'image/svg+xml'|'image/png'|'image/jpeg'|'image/gif'|'image/webp';alt:string;library:LibraryPin;copyright:{author:string;license:'U'|'C'|'CC BY'|'CC BY-SA'|'CC0 1.0'|'PD'}};
 }
-export type QuizSource=AuthoringBase&({type:'true_false';correct:boolean}|{type:'multi_choice';mode:'single'|'multiple';scoring:'all_or_nothing'|'partial_minus_incorrect';shuffle?:boolean;correct_ids:string[];choices:Array<{id:string;text:AuthorText;selected_feedback?:AuthorText;unselected_feedback?:AuthorText}>});
+export type QuizSource=AuthoringBase&({type:'true_false';correct:boolean}|{type:'multi_choice';mode:'single'|'multiple';scoring:'all_or_nothing'|'partial_minus_incorrect';shuffle?:boolean;correct_ids:string[];choices:Array<{id:string;text:AuthorText;hint?:AuthorText;selected_feedback?:AuthorText;unselected_feedback?:AuthorText}>});
 
 // QuestionSet admits only quiz leaves; project identity and assets belong to the root.
-export type QuestionSource=Omit<AuthoringBase,'schema_version'|'project_id'|'assets'>&({type:'true_false';correct:boolean}|{type:'multi_choice';mode:'single'|'multiple';scoring:'all_or_nothing'|'partial_minus_incorrect';shuffle?:boolean;correct_ids:string[];choices:Array<{id:string;text:AuthorText;selected_feedback?:AuthorText;unselected_feedback?:AuthorText}>});
+export type QuestionSource=Omit<AuthoringBase,'schema_version'|'project_id'|'assets'>&({type:'true_false';correct:boolean}|{type:'multi_choice';mode:'single'|'multiple';scoring:'all_or_nothing'|'partial_minus_incorrect';shuffle?:boolean;correct_ids:string[];choices:Array<{id:string;text:AuthorText;hint?:AuthorText;selected_feedback?:AuthorText;unselected_feedback?:AuthorText}>});
 export interface QuestionSetSource extends Omit<AuthoringBase,'question'|'image'> {type:'question_set';questions:Array<QuestionSource|Omit<BlanksSource,'schema_version'|'project_id'|'assets'>>;pass_percentage:number;shuffle?:boolean}
 
 
