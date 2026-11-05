@@ -91,8 +91,15 @@ compiler once:
 docker pull ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f
 ```
 
-The runner uses the Docker Desktop Linux pipe on Windows or the local
-`/var/run/docker.sock` socket on Unix. Each compile has two read-only input
+On Windows the runner invokes `/usr/bin/docker` inside Ubuntu WSL through
+`wsl.exe --exec`. Set `H5P_MCP_DOCKER_WSL_DISTRO` to select another distribution
+(default: `Ubuntu`). Install Docker Engine and BuildKit there and start its
+service with `wsl -d Ubuntu -u root -- systemctl start docker`. Docker Desktop
+is not required or started. Pull the pinned images using `wsl -d Ubuntu -- docker pull ...`.
+The Windows MCP keeps Windows paths for profiles and output; the runner translates
+bind mounts and build paths with `wslpath`. Those paths must be accessible from
+the selected distribution. On Unix the runner uses the local
+`/var/run/docker.sock` socket. Each compile has two read-only input
 mounts, a read-only root, no external network, no capabilities, a non-root UID,
 a 256 MiB memory limit with no extra swap, one CPU and a 64-process limit.
 Rendering requires an available local engine with these limits. The image is
@@ -139,7 +146,7 @@ activity rebuilds using the captured PNG still work without a renderer.
 For earlier direct or SVG-derived projects, retain the package and raster
 directories their original rendering method requires.
 On Windows, a stdio client can launch a Linux installation of the MCP through
-WSL2. Enable Docker Desktop integration for that distribution and verify
+WSL2. Install Docker Engine in that distribution and verify
 `docker --host unix:///var/run/docker.sock info` there. Install Linux Bun and
 the MCP in the distribution. Run both figure setup commands there and use
 Linux paths for the package profile, raster profile, temporary files and
