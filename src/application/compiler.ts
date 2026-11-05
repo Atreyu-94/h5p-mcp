@@ -1,3 +1,4 @@
+import {sourceScoring} from './source-scoring.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import {Ajv2020} from 'ajv/dist/2020.js';
@@ -220,5 +221,5 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   // Blanks segments and keys already carry their exact source pointers.
   if(!location.block)addWarning({...issue,pointer:location.pointer});
  }
- return finish({...prepared,ok:!diagnostics.length,diagnostics,mathWarnings,warnings:[...warnings,...prepared.warnings],transformations:prepared.transformations.map((item:Native)=>({...item,pointer:locate(item.pointer)})),normalized,source_map:sourceMap,identities});
+ return finish({...prepared,...(!diagnostics.length&&prepared.ok?{scoring_preview:sourceScoring(source)}:{}),ok:!diagnostics.length,diagnostics,mathWarnings,warnings:[...warnings,...prepared.warnings],transformations:prepared.transformations.map((item:Native)=>({...item,pointer:locate(item.pointer)})),normalized,source_map:sourceMap,identities});
 }

@@ -1,6 +1,85 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "scoring_preview": {
+      "type": "object",
+      "description": "Internal H5P points predicted for a supported pinned source. Absent for native activities and older preparations. Share is a fraction of the total.",
+      "properties": {
+        "status": {
+          "enum": [
+            "scored",
+            "unscored"
+          ]
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pass_percentage": {
+          "type": "integer"
+        },
+        "retry": {
+          "type": "boolean"
+        },
+        "show_solution": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "maximum": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "share": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "rule": {
+                "enum": [
+                  "correct_answer",
+                  "all_or_nothing",
+                  "partial_minus_incorrect",
+                  "one_per_correct_gap"
+                ],
+                "description": "All or nothing requires the exact selection. Partial scoring adds one per correct selection, subtracts one per incorrect selection and floors the result at zero. Each wrong or omitted gap earns zero."
+              },
+              "omitted_score": {
+                "const": 0
+              },
+              "retry": {
+                "type": "boolean"
+              },
+              "show_solution": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "maximum",
+              "share",
+              "rule",
+              "omitted_score",
+              "retry",
+              "show_solution"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "status",
+        "maximum",
+        "items"
+      ],
+      "additionalProperties": false
+    },
     "typst_figure_input": {
       "type": "object", "additionalProperties": false, "required": ["source", "alt"],
       "properties": {
@@ -755,6 +834,7 @@
     },
     "authoring_report": {
       "properties": {
+        "scoring_preview": { "$ref": "#/$defs/scoring_preview" },
         "report_version": {
           "const": "2"
         },

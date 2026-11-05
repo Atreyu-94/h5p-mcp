@@ -105,7 +105,15 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   await compilerFixture(root);await service.initialize();const source=trueFalse();
   expect(service.tools().find(t=>t.name==='compile_h5p_source').inputSchema.properties.source.properties.schema_version.const).toBe('1');
   const checked=(await service.call('check_h5p_source',{source})).structuredContent;expect(checked.ok).toBe(true);expect(valid('authoring_report',checked)).toBe(true);
-  const built=(await service.call('build_h5p_source',{source,output_name:'native'})).structuredContent;expect(built.ok).toBe(true);expect(built.export_mode).toBe('content-only');expect(built.verification.importation).toBe('not_run');
+  expect(checked.scoring_preview).toMatchObject({status:'scored',maximum:1});
+  const storedSource=(await service.call('prepare_stored_h5p_source',{source})).structuredContent;
+  expect(storedSource.scoring_preview).toEqual(checked.scoring_preview);
+  const {scoring_preview:preview,...legacy}=storedSource;
+  expect(preview.maximum).toBe(1);expect(valid('stored_output',legacy)).toBe(true);
+  expect(valid('stored_output',storedSource)).toBe(true);
+  const saved=await (await service.vault()).objects.get(storedSource.object_id,'preparation');
+  expect(saved.metadata.feedback.scoring_preview).toEqual(checked.scoring_preview);
+  const built=(await service.call('build_h5p_source',{source,output_name:'native'})).structuredContent;expect(built.ok).toBe(true);expect(built.scoring_preview).toEqual(checked.scoring_preview);expect(JSON.stringify(built.activity)).not.toContain('scoring_preview');expect(built.export_mode).toBe('content-only');expect(built.verification.importation).toBe('not_run');
   expect((await service.call('build_h5p_source',{source,output_name:'native'})).structuredContent.diagnostics[0].code).toBe('OUTPUT_ALREADY_EXISTS');
   const invalid=(await service.call('compile_h5p_source',{source:{schema_version:'wrong',type:'unknown'}})).structuredContent;expect(invalid.diagnostics.length).toBeGreaterThan(2);expect(invalid.diagnostics[0].stage).toBe('source');expect(invalid.isError).toBeUndefined();
   const unfair=multiChoice();unfair.choices[1].text=structuredClone(unfair.choices[0].text);
@@ -144,6 +152,7 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   expect(result.diagnostics).toEqual([]);expect(result.ok).toBe(true);
   expect(result.activity.params.questions[0].subContentId).toBe(stableId('demo','q1'));
   const spanish=await compileSource({...source,ui:{language:'es',missing:'fallback'}},libraries);
+  expect(result.scoring_preview.maximum).toBe(3);expect(result.scoring_preview.items.map((item:Native)=>item.share)).toEqual([1/3,2/3]);
   expect(spanish.activity.params.progressType).toBe('textual');
   expect(spanish.activity.params.texts).toMatchObject({previous:'Anterior',next:'Siguiente'});
   expect(spanish.activity.params.endGame).toMatchObject({message:'Resultados',amountCorrect:'@finals de @totals correctas',scoreHeader:'Puntuación'});
@@ -165,10 +174,13 @@ test('Blanks separates answer alternatives from Markdown and Accordion pins its 
   const source:Native={schema_version:'1',project_id:'demo',id:'blanks',type:'blanks',title:'Blanks',library:pin('H5P.Blanks 1.14'),question:plain('Complete'),case_sensitive:true,blocks:[{id:'line',segments:[{format:'markdown',value:'**Length** \\(x_1\\): '},{id:'answer',answers:['metre','meter']}]}],feedback:{correct:plain('Good'),incorrect:plain('Review')}};
   const result=await compileSource(source,libraries);expect(result.diagnostics).toEqual([]);expect(result.ok).toBe(true);expect(result.activity.params.questions[0]).toContain('*metre/meter*');expect(result.activity.params.questions[0]).toContain('<strong>Length</strong>');expect(result.activity.params.behaviour).toMatchObject({caseSensitive:true,acceptSpellingErrors:false});
   for(const answer of ['a/b','a:b','a*b',' padded','a\nb']){const bad=structuredClone(source);bad.blocks[0].segments[1].answers=[answer];expect((await compileSource(bad,libraries)).diagnostics).toContainEqual(expect.objectContaining({pointer:'/blocks/0/segments/1/answers/0',reason:'delimiter'}));}
+  const two=structuredClone(source);
+  two.blocks[0].segments.push({id:'extra',answers:['second']});
+  expect((await compileSource(two,libraries)).scoring_preview).toMatchObject({maximum:2,items:[{rule:'one_per_correct_gap'}]});
   const star=structuredClone(source);star.blocks[0].segments[0]=plain('x*y');expect((await compileSource(star,libraries)).ok).toBe(false);
   const panel={id:'panel',title:'Topic',text:{format:'markdown',value:'**Explanation**'},library:pin('H5P.AdvancedText 1.1')};
   const accordion={schema_version:'1',project_id:'demo',id:'accordion',type:'accordion',title:'Accordion',library:pin('H5P.Accordion 1.0'),panels:[panel]};
-  const compiled=await compileSource(accordion,libraries);expect(compiled.diagnostics).toEqual([]);expect(compiled.activity.params.panels[0].content.subContentId).toBe(stableId('demo','accordion','panel'));expect(compiled.activity.params.panels[0].content.params.text).toBe('<p><strong>Explanation</strong></p>');
+  const compiled=await compileSource(accordion,libraries);expect(compiled.scoring_preview).toEqual({status:"unscored",maximum:0,items:[]});expect(compiled.diagnostics).toEqual([]);expect(compiled.activity.params.panels[0].content.subContentId).toBe(stableId('demo','accordion','panel'));expect(compiled.activity.params.panels[0].content.params.text).toBe('<p><strong>Explanation</strong></p>');
   const child=structuredClone(source);delete child.schema_version;delete child.project_id;
   const set=await compileSource({schema_version:'1',project_id:'demo',id:'set',type:'question_set',title:'Set',library:pin('H5P.QuestionSet 1.21'),pass_percentage:50,questions:[child]},libraries);expect(set.diagnostics).toEqual([]);expect(set.ok).toBe(true);
  }finally{await fs.rm(root,{recursive:true,force:true});}
@@ -195,6 +207,29 @@ test('pinned QuestionSet runtime sums child scores and uses aggregate feedback t
  try{
   await compilerFixture(root);const base=path.join(root,'libraries');
   const runtime=await fs.readFile(path.join(base,'H5P.QuestionSet-1.21/js/questionset.js'),'utf8');
+  const mc=await fs.readFile(path.join(base,'H5P.MultiChoice-1.16/js/multichoice.js'),'utf8');
+  const method=(js:string,signature:string)=>{
+   const start=js.indexOf(signature);expect(start).toBeGreaterThanOrEqual(0);
+   const end=js.indexOf('\n  };',start);
+   return js.slice(js.indexOf('function',start),end+4);
+  };
+  const source=multiChoice();
+  const compiled=await compileSource(source,base);
+  const params={...compiled.activity.params,weight:1,userAnswers:[] as number[]};
+  const context:Native={params,blankIsCorrect:false,score:0};
+  context.calculateMaxScore=runInNewContext('('+method(mc,'var calculateMaxScore =')+')',context);
+  const max=runInNewContext('('+method(mc,'this.getMaxScore =')+')',context);
+  const score=runInNewContext('('+method(mc,'var calcScore =')+')',context);
+  expect(max()).toBe(compiled.scoring_preview.maximum);
+  for(const [answers,points] of [[[],0],[[0],1],[[0,1],0],[[0,2],2],[[0,1,2],1],[[],0]] as Array<[number[],number]>){
+   params.userAnswers=answers;score();expect(context.score).toBe(points);
+  }
+  const exact=await compileSource({...source,scoring:'all_or_nothing'},base);
+  params.behaviour=exact.activity.params.behaviour;
+  expect(max()).toBe(exact.scoring_preview.maximum);
+  for(const [answers,points] of [[[0],0],[[0,2],1],[[0,1,2],0]] as Array<[number[],number]>){
+   params.userAnswers=answers;score();expect(context.score).toBe(points);
+  }
   const children=[{getScore:()=>1,getMaxScore:()=>1},{getScore:()=>1,getMaxScore:()=>2}];
   const extract=(name:string)=>{const match=runtime.match(new RegExp('this\\.'+name+' = (function \\(\\) \\{[\\s\\S]*?\\n  \\});'));expect(match).not.toBeNull();return runInNewContext('('+match![1]+')',{questionInstances:children});};
   expect(extract('getScore')()).toBe(2);expect(extract('getMaxScore')()).toBe(3);

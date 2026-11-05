@@ -269,6 +269,7 @@
         "target": {
           "type": "object"
         },
+        "scoring_preview": { "$ref": "#/$defs/scoring_preview" },
         "report_version": {
           "const": "2"
         },
