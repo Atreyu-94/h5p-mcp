@@ -167,7 +167,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   }
   const spanish:Record<string,string>=version==='H5P.QuestionSet 1.21'?{
    'texts/previous':'Anterior','texts/next':'Siguiente','texts/questionSetInstruction':'Elige una pregunta',
-   'endGame/message':'Resultados','endGame/amountCorrect':'@finals de @totals correctas','endGame/scoreHeader':'Puntuación'
+   'endGame/message':'Resultados','endGame/amountCorrect':'@finals de @totals puntos','endGame/scoreHeader':'Puntuación'
   }:version==='H5P.Blanks 1.14'?{a11yCheckingModeHeader:'Modo de comprobación'}:{};
   function fill(entries:Native[],local:Native[],out:Native,at:string){
    const hasText=(entry:Native):boolean=>entry.type==='text'&&typeof entry.default==='string'||entry.type==='group'&&(entry.fields||[]).some(hasText);

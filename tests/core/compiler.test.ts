@@ -155,7 +155,7 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   expect(result.scoring_preview.maximum).toBe(3);expect(result.scoring_preview.items.map((item:Native)=>item.share)).toEqual([1/3,2/3]);
   expect(spanish.activity.params.progressType).toBe('textual');
   expect(spanish.activity.params.texts).toMatchObject({previous:'Anterior',next:'Siguiente'});
-  expect(spanish.activity.params.endGame).toMatchObject({message:'Resultados',amountCorrect:'@finals de @totals correctas',scoreHeader:'Puntuación'});
+  expect(spanish.activity.params.endGame).toMatchObject({message:'Resultados',amountCorrect:'@finals de @totals puntos',scoreHeader:'Puntuación'});
   expect(spanish.activity.params.introPage).toMatchObject({showIntroPage:false,startButtonText:'Iniciar prueba'});
   expect(result.activity.params.questions[1].params.behaviour.singlePoint).toBe(false);
   expect(result.activity.params.endGame.overallFeedback).toEqual([{from:0,to:59,feedback:'Review'},{from:60,to:100,feedback:'Passed'}]);
