@@ -6,4 +6,4 @@ Sketch the initial view, the result after a response and the retry state when re
 
 For scientific figures use verifiable geometry or data and record provenance for assets. Follow the [media rules](media.md) for packaged files. Describe what the image makes available, including values needed to solve the task. If perception itself is assessed, discuss an equivalent task with the teacher.
 
-Inspect the rendered activity at a narrow viewport and with zoom. Try the task by keyboard from start to feedback and retry. Check focus, reading order, labels, legibility, clipped units and whether feedback appears near the decision. Record the player, library version, viewport and states actually exercised.
+Inspect the rendered activity at a narrow viewport and with zoom. In both the thumbnail and expanded view, check that the zoom control leaves the last symbol, subscript or axis label readable. Try the task by keyboard from start to feedback and retry. Check focus, reading order, labels, legibility, clipped units and whether feedback appears near the decision. Record the player, library version, viewport and states actually exercised.
