@@ -30,6 +30,12 @@ test('preflight drains ignored entries, checks CRC, JSON roots and portable coll
  const valid:Array<[string,string,number?]>=[['h5p.json','{"mainLibrary":"X","preloadedDependencies":[{}]}'],['content/content.json','{}']];
  try {
   await fs.writeFile(file,zip(valid));await preflight(file,true);
+  await fs.writeFile(file,zip([['a'.repeat(3000)+'/empty','']]));
+  await expect(preflight(file)).rejects.toMatchObject({code:'UNSAFE_ARCHIVE'});
+  configureLimits({H5P_MCP_MAX_ZIP_PATH_INDEX_BYTES:'20'});
+  await fs.writeFile(file,zip([['abc/def',''],['ghi/jkl','']]));
+  await expect(preflight(file)).rejects.toMatchObject({code:'UNSAFE_ARCHIVE'});
+  configureLimits({});
   for(const extra of [[['../outside','x']],[['a','x'],['A','x']],[['straße','x'],['STRASSE','x']],[['a','x'],['a/b','x']],[['CON.txt','x']],[['link','x',0xa000]]]) {
    await fs.writeFile(file,zip([...valid,...extra] as Array<[string,string,number?]>));
    await expect(preflight(file,true)).rejects.toThrow('Archive rejected');

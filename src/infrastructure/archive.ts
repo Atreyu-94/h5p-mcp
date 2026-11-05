@@ -14,11 +14,16 @@ export async function preflight(filename:string,contentRequired=false,allowSvgCo
   zip=await yauzl.open(filename,{validateFilenames:false});
   const paths=new Map<string,{original:string,directory:boolean,explicit:boolean}>();
   const roots:Record<string,Native>={};
-  let members=0,declared=0,expanded=0;
+  let members=0,declared=0,expanded=0,pathBytes=0;
   for await(const entry of zip) {
    if(++members>limit('ZIP_MEMBERS',20000)) throw reject();
    const name=entry.filename,directory=name.endsWith('/');
+   const nameBytes=Buffer.byteLength(name);
+   if(nameBytes>limit('ZIP_PATH_BYTES',1024))throw reject();
    const parts=(directory?name.slice(0,-1):name).split('/');
+   // Charge before allocating prefixes, including their repeated leading segments.
+   pathBytes+=nameBytes*parts.length;
+   if(pathBytes>limit('ZIP_PATH_INDEX_BYTES',16777216))throw reject();
    const mode=(entry.externalFileAttributes>>>16)&0xf000;
    // oxlint-disable-next-line no-control-regex -- reject unsafe ZIP path bytes.
    if(/[\\\x00-\x1f<>:"|?*]/.test(name)||parts.length>limit('ZIP_PATH_DEPTH',32)||

@@ -3,6 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
+import {createReadStream} from 'node:fs';
+import {limit} from '../domain/limits.js';
 import {preflight} from '../infrastructure/archive.js';
 import {readBounded} from '../infrastructure/read-bounded.js';
 import {FileLibraryRepository} from './libraries.js';
@@ -13,9 +15,38 @@ import type {Native} from '../domain/types.js';
 const load=createRequire(import.meta.url),fail=(code='SCHEMA_VALIDATION_FAILED')=>Object.assign(new Error(code),{code});
 const hash=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 async function json(filename:string){return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await readBounded(filename,16777216)));}
-export async function unpack(filename:string,work:(root:string)=>Promise<Native>,content=false,allowSvgContent?:boolean){
- await preflight(filename,content,allowSvgContent);const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-package-native-'));
- try{const zip=await load('yauzl-promise').open(filename);try{for await(const entry of zip){const target=path.join(root,entry.filename);if(entry.filename.endsWith('/')){await fs.mkdir(target,{recursive:true});continue;}await fs.mkdir(path.dirname(target),{recursive:true});const file=await fs.open(target,'wx');try{for await(const bytes of await entry.openReadStream())await file.writeFile(bytes);}finally{await file.close();}}}finally{await zip.close();}return await work(root);}catch(error:Native){if(['TARGET_INCOMPATIBLE','LIBRARY_VERSION_MISMATCH','LIMIT_EXCEEDED','UNSAFE_ARCHIVE'].includes(error.code))throw error;throw Object.assign(fail(),{details:error.details});}finally{await fs.rm(root,{recursive:true,force:true});}
+export async function unpack(filename:string,work:(root:string)=>Promise<Native>,content=false,allowSvgContent?:boolean,stageParent=os.tmpdir()){
+ const stage=await fs.mkdtemp(path.join(stageParent,'h5p-package-native-'));
+ const copy=path.join(stage,'input.h5p'),root=path.join(stage,'contents');
+ try{
+  // Only the private copy is inspected and extracted; bound it even if the input grows.
+  const output=await fs.open(copy,'wx',0o600);
+  try{
+   let size=0;const maximum=limit('ZIP_ARCHIVE_BYTES',134217728);
+   for await(const chunk of createReadStream(filename)){
+    size+=chunk.length;if(size>maximum)throw fail('UNSAFE_ARCHIVE');
+    await output.writeFile(chunk);
+   }
+  }finally{await output.close();}
+  await preflight(copy,content,allowSvgContent);
+  await fs.mkdir(root);
+  const zip=await load('yauzl-promise').open(copy);
+  try{
+   for await(const entry of zip){
+    const target=path.join(root,entry.filename);
+    if(entry.filename.endsWith('/')){await fs.mkdir(target,{recursive:true});continue;}
+    await fs.mkdir(path.dirname(target),{recursive:true});
+    const file=await fs.open(target,'wx');
+    try{for await(const bytes of await entry.openReadStream())await file.writeFile(bytes);}
+    finally{await file.close();}
+   }
+  }finally{await zip.close();}
+  return await work(root);
+ }catch(error:Native){
+  if(['TARGET_INCOMPATIBLE','LIBRARY_VERSION_MISMATCH','LIMIT_EXCEEDED','UNSAFE_ARCHIVE',
+      'ENOSPC','EDQUOT','EIO','EXDEV','EROFS','EACCES','EPERM','EMFILE','ENFILE','EBUSY'].includes(error.code))throw error;
+  throw Object.assign(fail(),{details:error.details,cause:error});
+ }finally{await fs.rm(stage,{recursive:true,force:true});}
 }
 export async function inspectLibraries(root:string){
  const result:Native[]=[];const repo=new FileLibraryRepository(root);
@@ -34,7 +65,10 @@ export async function inspectLibraries(root:string){
  }
  return result;
 }
-export async function installPackage(filename:string,data:string){return unpack(filename,async root=>{
+export async function installPackage(filename:string,data:string){
+ await fs.mkdir(data,{recursive:true});
+ const scratch=os.tmpdir(),stageParent=path.dirname(scratch)===path.resolve(data)?scratch:data;
+ return unpack(filename,async root=>{
  const libraries=await inspectLibraries(root);if(!libraries.length)throw fail();
  const target=path.join(data,'libraries');await fs.mkdir(target,{recursive:true});
  const repo=new FileLibraryRepository(root),installed=new FileLibraryRepository(target);
@@ -42,16 +76,21 @@ export async function installPackage(filename:string,data:string){return unpack(
  for(const item of libraries)await resolveLibraries(combined,{library:item.name,params:{}});
  // All conflicts are checked before publishing any library. Equal patches must
  // have identical files; newer/older patches require an explicit replacement policy.
+ const pending:string[]=[];
  for(const item of libraries){
   const destination=path.join(target,item.folder);
-  if(await fs.access(destination).then(()=>true,()=>false)){
+  const exists=await fs.lstat(destination).catch(error=>{if(error.code!=='ENOENT')throw error;});
+  if(exists){
+   if(!exists.isDirectory())throw fail('LIBRARY_VERSION_MISMATCH');
    const inventory=async(base:string)=>{const files:Record<string,string>={};const walk=async(dir:string):Promise<void>=>{for(const e of await fs.readdir(dir,{withFileTypes:true})){if(e.isSymbolicLink())throw fail();const file=path.join(dir,e.name);if(e.isDirectory())await walk(file);else files[path.relative(base,file)]=hash(await readBounded(file,134217728));}};await walk(base);return Object.entries(files).sort();};
    if(JSON.stringify(await inventory(destination))!==JSON.stringify(await inventory(path.join(root,item.folder))))throw fail('LIBRARY_VERSION_MISMATCH');
-  }
+  }else pending.push(item.folder);
  }
- for(const item of libraries){const destination=path.join(target,item.folder);if(!await fs.access(destination).then(()=>true,()=>false))await fs.cp(path.join(root,item.folder),destination,{recursive:true,errorOnExist:true,force:false});}
+ // Extraction and inspection already finished in a sibling on the store volume.
+ // A retry recognizes any complete libraries published before an interruption.
+ for(const folder of pending)await fs.rename(path.join(root,folder),path.join(target,folder));
  return {ok:true,libraries:libraries.length,engine:'native-package-v1'};
- });}
+ },false,undefined,stageParent);}
 /** Check package metadata before projecting it onto the authoring contract. */
 function validateMetadata(meta:Native){
  if(!meta||typeof meta!=='object'||Array.isArray(meta))throw fail();

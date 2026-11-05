@@ -1,4 +1,4 @@
-import {test,expect} from 'bun:test';
+import {test,expect,spyOn} from 'bun:test';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {createRequire} from 'node:module';
 import {validatePackage,installPackage} from '../../src/h5p/packages.js';
 const {ZipFile}=createRequire(import.meta.url)('yazl');
@@ -8,6 +8,28 @@ test('native imports reject missing exact dependencies in every role, newer Core
  const meta=(name:string,minor=0)=>({machineName:name,title:name,majorVersion:1,minorVersion:minor,patchVersion:0,runnable:0});
  async function pack(name:string,files:Record<string,unknown>){const zip=new ZipFile(),filename=path.join(root,name+'.h5p');for(const [key,value] of Object.entries(files))zip.addBuffer(Buffer.from(JSON.stringify(value)),key,{compress:false});const writing=pipeline(zip.outputStream,createWriteStream(filename));zip.end();await writing;return filename;}
  try{
+  const two=await pack('two',{'H5P.A-1.0/library.json':meta('H5P.A'),'H5P.B-1.0/library.json':meta('H5P.B')});
+  const original=await pack('original',{'H5P.Original-1.0/library.json':meta('H5P.Original')});
+  const mkdir=fs.mkdir;
+  const swap=spyOn(fs,'mkdir').mockImplementation(async(...args:Parameters<typeof mkdir>)=>{
+   if(path.basename(String(args[0]))==='contents')await fs.copyFile(two,original);
+   return mkdir(...args);
+  });
+  const replaced=path.join(root,'replace-input');
+  try{await installPackage(original,replaced);}finally{swap.mockRestore();}
+  expect(await fs.readFile(original)).toEqual(await fs.readFile(two));
+  expect(await fs.readdir(path.join(replaced,'libraries'))).toEqual(['H5P.Original-1.0']);
+  const target=path.join(root,'interrupted'),rename=fs.rename;
+  let published=0;
+  const fault=spyOn(fs,'rename').mockImplementation(async(from,to)=>{
+   if(++published===2)throw Object.assign(new Error('disk full'),{code:'ENOSPC',errno:-28});
+   return rename(from,to);
+  });
+  try{await expect(installPackage(two,target)).rejects.toMatchObject({code:'ENOSPC'});}
+  finally{fault.mockRestore();}
+  const folders=await fs.readdir(path.join(target,'libraries'));expect(folders).toHaveLength(1);
+  expect(await fs.readdir(path.join(target,'libraries',folders[0]))).toEqual(['library.json']);
+  expect((await installPackage(two,target)).ok).toBe(true);
   for(const role of ['preloadedDependencies','dynamicDependencies','editorDependencies']){
    const filename=await pack(role,{'H5P.Test-1.0/library.json':{...meta('H5P.Test'),[role]:[{machineName:'H5P.Child',majorVersion:1,minorVersion:0}]},'H5P.Child-1.1/library.json':meta('H5P.Child',1)});
    await expect(installPackage(filename,path.join(root,'store'))).rejects.toBeDefined();expect(await fs.readdir(path.join(root,'store/libraries'))).toEqual([]);

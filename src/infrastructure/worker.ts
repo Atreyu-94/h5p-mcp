@@ -6,7 +6,10 @@ import {fileURLToPath} from 'node:url';
 import {limit} from '../domain/limits.js';
 import type {CoreRequest,Reply} from '../domain/types.js';
 export async function isolated(request:CoreRequest,signal:AbortSignal,assetRoots?:string[]):Promise<unknown> {
- const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-worker-core-'));
+ const installing=request.action==='setup'||request.install_if_missing;
+ const parent=installing?request.data_dir:os.tmpdir();
+ if(installing)await fs.mkdir(parent,{recursive:true});
+ const root=await fs.mkdtemp(path.join(parent,'h5p-worker-core-'));
  try {
   return await new Promise((resolve,reject)=>{
    const child=spawn(process.execPath,[fileURLToPath(new URL('../adapters/worker.js',import.meta.url))],
