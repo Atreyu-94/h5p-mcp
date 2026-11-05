@@ -24,7 +24,7 @@ test('compiler pins adapters, preserves educational settings, translations, form
   await compilerFixture(root);const libraries=path.join(root,'libraries');
   const source=trueFalse(),before=JSON.stringify(source),first=await compileSource(source,libraries),again=await compileSource(source,libraries);
   expect(first.diagnostics).toEqual([]);expect(first.activity.params.l10n.trueText).toBe('Verdadero');expect(first.activity.params.question).toBe('<p>\\(1+1=2\\)</p>');expect(first.mathematics.detected).toBe(true);expect(first.activity.params.behaviour.feedbackOnCorrect).toBe('Correct');expect(first.activity.params.behaviour.feedbackOnWrong).toBe('Try again');expect(first.activity).toEqual(again.activity);expect(JSON.stringify(source)).toBe(before);
-  const multiple=multiChoice(),result=await compileSource(multiple,libraries);expect(result.diagnostics).toEqual([]);expect(result.activity.params.answers.map((a:Native)=>a.correct)).toEqual([true,false,true]);expect(result.activity.params.behaviour).toMatchObject({type:'multi',singlePoint:false,randomAnswers:false,passPercentage:100});expect(result.activity.params.answers[0].tipsAndFeedback.chosenFeedback).toBe('<p>Length</p>');expect(result.activity.params.answers[0].tipsAndFeedback.tip).toBe('<p>Compare units</p>');expect(result.activity.params.overallFeedback[1].feedback).toBe('<p>All correct</p>');expect(result.source_map['/params/answers/0/text']).toBe('/choices/0/text');
+  const multiple=multiChoice(),result=await compileSource(multiple,libraries);expect(result.diagnostics).toEqual([]);expect(result.activity.params.answers.map((a:Native)=>a.correct)).toEqual([true,false,true]);expect(result.activity.params.behaviour).toMatchObject({type:'multi',singlePoint:false,randomAnswers:false,passPercentage:100});expect(result.activity.params.answers[0].tipsAndFeedback.chosenFeedback).toBe('<p>Length</p>');expect(result.activity.params.answers[0].tipsAndFeedback.tip).toBe('<p>Compare units</p>');expect(result.activity.params.overallFeedback[1].feedback).toBe('All correct');expect(result.source_map['/params/answers/0/text']).toBe('/choices/0/text');
   const reordered=await compileSource({...multiple,choices:[...multiple.choices].reverse()},libraries);expect(reordered.identities).toEqual(result.identities);expect(reordered.activity.params.answers[2].text).toBe(result.activity.params.answers[0].text);
   const file=path.join(root,'image.png');await fs.writeFile(file,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ioAAAAASUVORK5CYII=','base64'));
   const picture={...source,assets:{photo:file},image:{id:'photo',asset:'photo',mime:'image/png',alt:'A square',library:pin('H5P.Image 1.1'),copyright:{author:'Teacher',license:'CC BY'}}};
@@ -116,6 +116,9 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   expect(result.diagnostics).toEqual([]);expect(result.ok).toBe(true);
   expect(result.activity.params.questions[0].subContentId).toBe(stableId('demo','q1'));
   const spanish=await compileSource({...source,ui:{language:'es',missing:'fallback'}},libraries);
+  expect(spanish.activity.params.progressType).toBe('textual');
+  expect(spanish.activity.params.texts).toMatchObject({previous:'Anterior',next:'Siguiente'});
+  expect(spanish.activity.params.endGame).toMatchObject({message:'Resultados',amountCorrect:'@finals de @totals correctas',scoreHeader:'Puntuación'});
   expect(spanish.activity.params.introPage).toMatchObject({showIntroPage:false,startButtonText:'Iniciar prueba'});
   expect(result.activity.params.questions[1].params.behaviour.singlePoint).toBe(false);
   expect(result.activity.params.endGame.overallFeedback).toEqual([{from:0,to:59,feedback:'Review'},{from:60,to:100,feedback:'Passed'}]);

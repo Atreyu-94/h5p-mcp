@@ -74,7 +74,7 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
   Object.assign(params.behaviour,{type:source.mode==='single'?'single':'multi',singlePoint:source.scoring==='all_or_nothing',randomAnswers:normalized.shuffle,passPercentage:100});
   sourceMap['/params/behaviour/type']='/mode';sourceMap['/params/behaviour/singlePoint']='/scoring';sourceMap['/params/behaviour/randomAnswers']='/shuffle';
   // H5P uses floored percentage for feedback selection (Question.determineOverallFeedback).
-  if(source.feedback)params.overallFeedback=[{from:0,to:99,feedback:text(source.feedback.incorrect,'/feedback/incorrect','/params/overallFeedback/0/feedback')},{from:100,to:100,feedback:text(source.feedback.correct,'/feedback/correct','/params/overallFeedback/1/feedback')}];
+  if(source.feedback)params.overallFeedback=[{from:0,to:99,feedback:playbackText(text(source.feedback.incorrect,'/feedback/incorrect','/params/overallFeedback/0/feedback'))},{from:100,to:100,feedback:playbackText(text(source.feedback.correct,'/feedback/correct','/params/overallFeedback/1/feedback'))}];
  }else if(source.type==='blanks'){
   params.text=params.question;delete params.question;sourceMap['/params/text']='/question';delete sourceMap['/params/question'];
   params.behaviour.caseSensitive=source.case_sensitive;params.behaviour.acceptSpellingErrors=false;
@@ -120,6 +120,8 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    params.panels.push({title:panel.title,content:{library:panel.library.name,subContentId:identities[panel.id],params:{text:text(panel.text,`/panels/${i}/text`,prefix+'/content/params/text')}}});
   }
  }else{
+  // The pinned dot navigator repeats the active index and omits the current-state label.
+  params.progressType='textual';
   params.introPage={showIntroPage:false};params.questions=[];params.passPercentage=source.pass_percentage;params.randomQuestions=source.shuffle??false;
   params.endGame={showResultPage:true,showSolutionButton:normalized.show_solution,showRetryButton:normalized.retry,showAnimations:false,skippable:false};
   sourceMap['/params/passPercentage']='/pass_percentage';sourceMap['/params/randomQuestions']='/shuffle';
@@ -151,6 +153,10 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    try{const value=await repo.getTranslation(libraryVersion(version),normalized.ui.language);if(!Array.isArray(value.semantics))throw new Error();translated=value.semantics;}
    catch{if(normalized.ui.missing==='error')error('/ui/language','translation','adapter');else warnings.push('Translation unavailable for '+version+'; using English defaults.');}
   }
+  const spanish:Record<string,string>=version==='H5P.QuestionSet 1.21'?{
+   'texts/previous':'Anterior','texts/next':'Siguiente','texts/questionSetInstruction':'Elige una pregunta',
+   'endGame/message':'Resultados','endGame/amountCorrect':'@finals de @totals correctas','endGame/scoreHeader':'Puntuación'
+  }:version==='H5P.Blanks 1.14'?{a11yCheckingModeHeader:'Modo de comprobación'}:{};
   function fill(entries:Native[],local:Native[],out:Native,at:string){
    const hasText=(entry:Native):boolean=>entry.type==='text'&&typeof entry.default==='string'||entry.type==='group'&&(entry.fields||[]).some(hasText);
    entries.forEach((entry,i)=>{
@@ -158,9 +164,10 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
     const here=at+'/'+escape(entry.name);
     if(entry.type==='group'){out[entry.name]??={};fill(entry.fields||[],local?.[i]?.fields||[],out[entry.name],here);}
     else if(entry.type==='text'&&typeof entry.default==='string'){
-     out[entry.name]=typeof local?.[i]?.default==='string'?local[i].default:entry.default;sourceMap[here]='/ui/language';
+     const fallback=normalized.ui.language==='es'?spanish[here.slice('/params/'.length)]:undefined;
+     out[entry.name]=fallback??local?.[i]?.default??entry.default;sourceMap[here]='/ui/language';
      const key=here.slice('/params/'.length);
-     if(translated.length&&typeof local?.[i]?.default!=='string'&&!Object.hasOwn(normalized.ui.overrides,key))missingDefault=true;
+     if(!fallback&&translated.length&&typeof local?.[i]?.default!=='string'&&!Object.hasOwn(normalized.ui.overrides,key))missingDefault=true;
      if(Object.hasOwn(normalized.ui.overrides,key)){out[entry.name]=normalized.ui.overrides[key];sourceMap[here]='/ui/overrides/'+escape(key);usedOverrides.add(key);}
     }
    });
