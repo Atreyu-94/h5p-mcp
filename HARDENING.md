@@ -64,11 +64,22 @@ Positive integer environment variables configure these defaults:
 | ZIP_ARCHIVE_BYTES | 134217728 |
 | ZIP_RATIO | 1000 |
 | ZIP_PATH_DEPTH | 32 |
+| ZIP_PATH_BYTES | 1024 |
+| ZIP_PATH_INDEX_BYTES | 16777216 |
 | LIBRARIES | 1000 |
 | DEPENDENCY_EDGES | 5000 |
 | DEPENDENCY_DEPTH | 32 |
 | BATCH | 50 |
 | SECONDS | 300 |
+
+The ZIP path budget charges each member's UTF-8 name length multiplied by its
+component count before indexing prefixes. This also charges empty members.
+
+When upgrading an existing object store, stop older MCP processes first. The
+new version adds a cleanup flag to the SQLite object table. Each collection
+processes up to 32 pending objects and purges up to 32 retained tombstones.
+Successful physical cleanup is recorded separately from the one-day retention
+period used for retries and idempotency.
 
 Media reads run sequentially and are bounded even if a file grows after stat.
 ZIP validation checks compressed size before opening, bounds expansion ratio,
@@ -86,8 +97,8 @@ even when a hard kill prevents JavaScript finally blocks from executing.
 Worker stdout/stderr are collected through bounded pipes; these are operational
 budgets, not an OS memory/disk sandbox. Admission and lock waits are cancellable;
 prepare/validate/export jobs run in subprocesses that are killed and reaped
-before staging cleanup completes. Preflight and subsequent import are not an
-immutable filesystem snapshot.
+before staging cleanup completes. Package validation and installation inspect and
+extract the same byte-limited private copy of the input archive.
 Cancellation does not undo already completed batch items. OS calls blocked on a
 faulty local filesystem may delay cooperative cleanup.
 
@@ -155,11 +166,16 @@ Run `bun audit` against the current advisory registry; a clean result is not a
 claim that all dependencies are free of undiscovered vulnerabilities.
 ## Local library generations
 
-Normal preparation, compilation, export and catalog queries pin a private copy of the installed libraries. Both the engine and Vault capture use `<H5P_MCP_DATA_DIR>/.h5p-generations-v2/`. This derived cache is separate from the public library snapshot IDs, ownership checks and retention rules in the object store. Use a host-owned local filesystem with SQLite locking and atomic directory rename. Restrict access to the server account (owner-only directory mode on POSIX, private inherited ACLs on Windows).
+Normal preparation, compilation, export and schema queries pin a private copy of the installed libraries. Non-mutating catalog discovery reads current metadata and semantics under the source lock without copying runtime files or creating a generation. It is advisory discovery, not runtime integrity certification; content operations still verify the complete generation. Both the engine and Vault capture use `<H5P_MCP_DATA_DIR>/.h5p-generations-v2/`. This derived cache is separate from the public library snapshot IDs, ownership checks and retention rules in the object store. Use a host-owned local filesystem with SQLite locking and atomic directory rename. Restrict access to the server account (owner-only directory mode on POSIX, private inherited ACLs on Windows).
 
 Every acquisition reads the source library tree, cache.json and config.json. The server hashes up to eight files at a time with 64 KiB buffers and combines their types, paths and SHA-256 values in sorted traversal order. On reuse the server checks the persisted data against that identity before issuing a reader handle. On a miss it stages a copy on the same volume, verifies both source and destination, and publishes by rename under the existing source lock. Closing a service releases its completed operations and leaves published copies for future processes. A SQLite read transaction held for the lifetime of each operation prevents eviction of its directory by another process. If all eligible copies are busy the caller receives LIMIT_EXCEEDED. A mismatching data copy is rebuilt when idle or rejected while pinned. If the SQLite coordination file itself is damaged, stop the services before repairing the cache; eviction requires a working lock.
 
-By default each store retains up to four generations (`H5P_MCP_MAX_GENERATIONS`) plus space for one generation under construction. Each is subject to the snapshot file/byte limits and the two bounded configuration files. A newly published generation may temporarily occupy the staging allowance while an idle predecessor is reclaimed. An empty cache is initialized with the .owned-by-h5p-mcp-v2 marker. A nonempty v2 directory without that marker is rejected before cleanup. The previous v1 cache is left untouched and may be removed offline after stopping any older servers. An idle victim is renamed to discard before recursive deletion. Each acquisition retries unfinished cleanup under the store lock. Within the configured capacity, verified hits remain available if deleting discard fails. Acquisitions that need a new copy return the cleanup error until that space is reclaimed. As before, an operator must confirm that no writer survives before removing an orphaned .core-lock after an abrupt shutdown.
+File hashing and copying use continuously replenished concurrency of eight. The collected traversal is bounded by the snapshot member limit, including directory entries, and preserves empty directories. Errors and cancellation stop new file work and drain started operations before releasing the source lock or cleaning staging. Copies use independent files with exclusive destination creation; the sorted v2 generation identity is unchanged. The request signal is checked inside the mapping operation rather than passed to p-map's early-rejecting signal option.
+
+By default each store retains up to four generations (`H5P_MCP_MAX_GENERATIONS`) plus space for one generation under construction. Each is subject to the snapshot file/byte limits and the two bounded configuration files. A newly published generation may temporarily occupy the staging allowance while an idle predecessor is reclaimed. An empty cache is initialized with the .owned-by-h5p-mcp-v2 marker. A nonempty v2 directory without that marker is rejected before cleanup. The previous v1 cache is left untouched and may be removed offline after stopping any older servers. An idle victim is renamed to discard before recursive deletion. Each acquisition retries unfinished cleanup under the store lock. Within the configured capacity, verified hits remain available if deleting discard fails. Acquisitions that need a new copy return the cleanup error until that space is reclaimed.
+
+New writers hold a SQLite write transaction in `.core-lock-v2.sqlite` for the duration of the operation. While held, a hard link from `.core-lock-v2.token` to `.core-lock` excludes older clients that use mkdir. After an abrupt exit, the next upgraded client obtains the SQLite lease and recognizes its own marker by file identity. Keep the lease database and token in place. A legacy directory or an unrelated file at `.core-lock` is never reclaimed automatically. For an orphaned legacy directory, stop and verify all writers before manual removal. The store filesystem must support SQLite locking and hard links. Library installation publishes each verified directory by rename on the store volume. Retrying the same package completes any remaining libraries.
+
 
 Permission and disk-full errors stop acquisition. To run without persistent generation storage, set `H5P_MCP_GENERATION_CACHE=temporary` before startup. This uses private, verified temporary copies removed at close. The source lock and temporary space are still required. An existing store needs no migration. For offline cache removal or repair, stop all processes using that store and remove only its derived cache directory. The source libraries and the object store are independent.
 
