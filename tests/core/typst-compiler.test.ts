@@ -46,7 +46,7 @@ test('failed repair keeps the active selection and removal preserves unrelated f
   expect(await fs.readFile(path.join(dir,'active'),'utf8')).toBe(build);
   globalThis.fetch=Object.assign(async()=>new Response(new ReadableStream({start(stream){stream.error(new Error('interrupted'));}})),original);
   await expect(installCompiler(signal,true)).rejects.toThrow('interrupted');
-  expect((await fs.readdir(dir)).sort()).toEqual(['active',build].sort());
+  expect((await fs.readdir(dir)).sort()).toEqual(['.core-lock-v2.sqlite','.core-lock-v2.token','active',build].sort());
   expect((await removeCompiler(signal)).removed).toBe(1);
   expect(await fs.readFile(path.join(generation,'teacher.txt'),'utf8')).toBe('keep');
  }finally{

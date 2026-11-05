@@ -2,7 +2,7 @@ import {expect,spyOn,test} from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createRequire} from 'node:module';
 import {Generations,exclusive} from '../../src/infrastructure/generations.js';
@@ -73,6 +73,22 @@ test('aborted copy leaves previous generation and ephemeral fallback cleans its 
   if(mode===undefined)delete process.env.H5P_MCP_GENERATION_CACHE;else process.env.H5P_MCP_GENERATION_CACHE=mode;
   await gen.close();await fs.rm(root,{recursive:true,force:true});
  }
+});
+
+test('a fresh process can acquire the lease after its holder exits abruptly',async()=>{
+ const {root}=await fixture();
+ const module=new URL('../../src/infrastructure/generations.ts',import.meta.url).href;
+ try{
+  const code=`import {exclusive} from ${JSON.stringify(module)};await exclusive(process.argv[1],AbortSignal.timeout(2000),async()=>process.exit(71));`;
+  expect(spawnSync(process.execPath,['-e',code,root],{timeout:5000}).status).toBe(71);
+  await exclusive(root,AbortSignal.timeout(2000),async()=>{
+   await expect(fs.mkdir(path.join(root,'.core-lock'))).rejects.toMatchObject({code:'EEXIST'});
+   await expect(exclusive(root,AbortSignal.timeout(100),async()=>{})).rejects.toBeDefined();
+  });
+  await fs.mkdir(path.join(root,'.core-lock'));
+  await expect(exclusive(root,AbortSignal.timeout(100),async()=>{})).rejects.toBeDefined();
+  expect((await fs.stat(path.join(root,'.core-lock'))).isDirectory()).toBe(true);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 
 test('another process keeps its pinned export while a server closes and publishes new libraries',async()=>{

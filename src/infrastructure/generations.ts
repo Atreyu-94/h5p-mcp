@@ -7,17 +7,37 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {limit} from '../domain/limits.js';
 import {readBounded} from './read-bounded.js';
 
-/** Shared with Python; never guess that another process' lock is stale. */
+/** SQLite owns the live lease. The hard link also excludes legacy mkdir clients. */
 export async function exclusive<T>(root:string,signal:AbortSignal,work:()=>Promise<T>):Promise<T> {
  await fs.mkdir(root,{recursive:true});
- const lock=path.join(root,'.core-lock');
- while(true) {
-  signal.throwIfAborted();
-  try {await fs.mkdir(lock);break;} catch(error) {if((error as NodeJS.ErrnoException).code!=='EEXIST') throw error;}
-  await delay(25,undefined,{signal});
- }
- try {signal.throwIfAborted();return await work();}
- finally {await fs.rmdir(lock);}
+ const lock=path.join(root,'.core-lock'),token=path.join(root,'.core-lock-v2.token');
+ const db=new Database(path.join(root,'.core-lock-v2.sqlite'),{create:true});
+ try{
+  db.exec('PRAGMA busy_timeout=0');
+  while(true){
+   signal.throwIfAborted();
+   try{db.exec('BEGIN IMMEDIATE');break;}
+   catch(error){if((error as NodeJS.ErrnoException).code!=='SQLITE_BUSY')throw error;}
+   await delay(25,undefined,{signal});
+  }
+  try{await fs.writeFile(token,'',{flag:'wx',mode:0o600});}
+  catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
+  const identity=await fs.lstat(token,{bigint:true});
+  if(!identity.isFile()||!identity.ino)throw new Error('Invalid core lock token');
+  while(true){
+   signal.throwIfAborted();
+   const existing=await fs.lstat(lock,{bigint:true}).catch(error=>{if(!missing(error))throw error;});
+   // Holding the SQLite lease proves a matching link has no surviving v2 owner.
+   if(existing?.isFile()&&existing.ino===identity.ino&&existing.dev===identity.dev)break;
+   if(!existing){
+    try{await fs.link(token,lock);break;}
+    catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
+   }
+   await delay(25,undefined,{signal});
+  }
+  try{signal.throwIfAborted();return await work();}
+  finally{await fs.unlink(lock);}
+ }finally{db.close();}
 }
 const cacheName='.h5p-generations-v2';
 const configNames=['cache.json','config.json'] as const;
