@@ -8,6 +8,7 @@ const reasons:Record<string,string>={
  math_display:'Close display math with \\] in the same text.',
  math_double:'Close display math with $$ in the same text.',
  math_library:'LaTeX requires H5P.MathDisplay 1.0. Install the official addon with h5p-mcp admin package <absolute MathDisplay.h5p path>.',
+ conflicting_choice:'These choices display the same answer with conflicting answer keys. Revise their text or keys.',
  delimiter:'This literal collides with a native Blanks delimiter and has no supported escape.',structure:'Source does not satisfy the authoring schema.',adapter:'No source field or supported adapter represents this native requirement.',pin:'Installed library patch or semantics differ from the supported pin.',library:'The pinned library or semantics are not installed.',duplicate:'IDs must be unique within this activity.',reference:'The referenced ID does not exist.',cardinality:'Single selection requires exactly one correct answer.',scoring:'This scoring policy cannot be represented by the selected mode.',markdown:'Unsupported Markdown syntax; use the documented subset or plain text.',translation:'The requested interface translation is unavailable.',override:'This override does not identify a supported interface text field.',native:'Compiled content does not satisfy the native field contract.'};
 const read=(name:string)=>JSON.parse(fs.readFileSync(path.join(repositoryRoot,'h5p_mcp/contracts',name),'utf8'));
 export const base=read('v1.json'), operations=read('operations-v1.json'), codes=read('codes-v1.json');

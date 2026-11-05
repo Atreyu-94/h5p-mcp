@@ -71,6 +71,17 @@ export async function compileSource(source:Native,libraries:string,prepare=true)
    for(const [key,field] of [['hint','tip'],['selected_feedback','chosenFeedback'],['unselected_feedback','notChosenFeedback']])if(choice[key]){answer.tipsAndFeedback??={};answer.tipsAndFeedback[field]=text(choice[key],origin+'/'+key,prefix+'/tipsAndFeedback/'+field);}
    return answer;
   });
+  // Compare canonical renderer output so meaningful markup, units and case survive.
+  const labels=new Map<string,{correct:boolean,index:number}>();
+  const conflicts=new Set<number>();
+  params.answers.forEach((answer:Native,index:number)=>{
+   const label=answer.text.replace(/[ \t\r\n]+/g,' ').replace(/<p> +/g,'<p>').replace(/ +<\/p>/g,'</p>');
+   if(!label)return;
+   const previous=labels.get(label);
+   if(!previous)labels.set(label,{correct:answer.correct,index});
+   else if(previous.correct!==answer.correct){conflicts.add(previous.index);conflicts.add(index);}
+  });
+  for(const index of conflicts)error('/choices/'+index+'/text','conflicting_choice');
   Object.assign(params.behaviour,{type:source.mode==='single'?'single':'multi',singlePoint:source.scoring==='all_or_nothing',randomAnswers:normalized.shuffle,passPercentage:100});
   sourceMap['/params/behaviour/type']='/mode';sourceMap['/params/behaviour/singlePoint']='/scoring';sourceMap['/params/behaviour/randomAnswers']='/shuffle';
   // H5P uses floored percentage for feedback selection (Question.determineOverallFeedback).

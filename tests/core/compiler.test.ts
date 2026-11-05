@@ -19,6 +19,27 @@ export const plain=(value:string)=>({format:'plain',value});
 export const trueFalse=()=>({schema_version:'1',project_id:'demo',id:'q1',type:'true_false',title:'Test',library:pin('H5P.TrueFalse 1.8'),question:plain('\\(1+1=2\\)'),correct:true,feedback:{correct:plain('Correct'),incorrect:plain('Try again')},ui:{language:'es'}});
 export const multiChoice=()=>({schema_version:'1',project_id:'demo',id:'q2',type:'multi_choice',title:'Choice',library:pin('H5P.MultiChoice 1.16'),question:plain('Select lengths'),mode:'multiple',scoring:'partial_minus_incorrect',correct_ids:['m','km'],choices:[{id:'m',text:plain('metre'),hint:plain('Compare units'),selected_feedback:plain('Length')},{id:'s',text:plain('second')},{id:'km',text:plain('kilometre')}],feedback:{correct:plain('All correct'),incorrect:plain('Review')} });
 
+test('conflicting rendered choices identify both source locations',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-choices-'));
+ try{
+  await compilerFixture(root);
+  const libraries=path.join(root,'libraries');
+  const check=(source:Native)=>compileSource(source,libraries);
+  const child:Native=multiChoice();
+  child.choices[0].text=plain('2 m/s²');
+  child.choices[1].text={format:'markdown',value:'2   m/s²'};
+  const errors=(await check(child)).diagnostics;
+  expect(errors.map((d:Native)=>d.pointer)).toEqual(['/choices/0/text','/choices/1/text']);
+  delete child.schema_version;delete child.project_id;
+  const set={schema_version:'1',project_id:'demo',id:'series',title:'Series',type:'question_set',library:pin('H5P.QuestionSet 1.21'),pass_percentage:100,questions:[child]};
+  expect((await check(set)).diagnostics.map((d:Native)=>d.pointer)).toEqual(['/questions/0/choices/0/text','/questions/0/choices/1/text']);
+  for(const [a,b] of [['mW','MW'],['+2','−2'],['**A**','A'],['x²','x2']]){
+   child.choices[0].text={format:'markdown',value:a};child.choices[1].text=plain(b);
+   expect((await check(set)).ok).toBe(true);
+  }
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+},120000);
+
 test('compiler pins adapters, preserves educational settings, translations, formulas and stable identities',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-compiler-'));try{
   await compilerFixture(root);const libraries=path.join(root,'libraries');
@@ -87,6 +108,13 @@ test('CLI and local MCP service share native compilation/build and stored feedba
   const built=(await service.call('build_h5p_source',{source,output_name:'native'})).structuredContent;expect(built.ok).toBe(true);expect(built.export_mode).toBe('content-only');expect(built.verification.importation).toBe('not_run');
   expect((await service.call('build_h5p_source',{source,output_name:'native'})).structuredContent.diagnostics[0].code).toBe('OUTPUT_ALREADY_EXISTS');
   const invalid=(await service.call('compile_h5p_source',{source:{schema_version:'wrong',type:'unknown'}})).structuredContent;expect(invalid.diagnostics.length).toBeGreaterThan(2);expect(invalid.diagnostics[0].stage).toBe('source');expect(invalid.isError).toBeUndefined();
+  const unfair=multiChoice();unfair.choices[1].text=structuredClone(unfair.choices[0].text);
+  for(const tool of ['check_h5p_source','compile_h5p_source','build_h5p_source']){
+   const args=tool==='build_h5p_source'?{source:unfair,output_name:'unfair'}:{source:unfair};
+   const rejected=(await service.call(tool,args)).structuredContent;
+   expect(rejected.ok).toBe(false);expect(rejected.artifact).toBeUndefined();expect(await fs.readdir(path.join(root,'exports'))).not.toContain('unfair.h5p');
+   expect(rejected.diagnostics.map((d:Native)=>d.pointer)).toEqual(['/choices/0/text','/choices/1/text']);
+  }
   const filename=path.join(root,'source.json');await fs.writeFile(filename,JSON.stringify(source));
   const cli=Bun.spawn([process.execPath,fileURLToPath(new URL('../../dist/core/cli.js',import.meta.url)),'compile',filename],{env:{...process.env,H5P_MCP_DATA_DIR:root},stdout:'pipe',stderr:'pipe'});
   const [out,err]=await Promise.all([new Response(cli.stdout).text(),new Response(cli.stderr).text()]);expect({code:await cli.exited,err}).toEqual({code:0,err:''});expect(JSON.parse(out).activity.params).toEqual(checked.activity.params);expect(JSON.parse(out).activity.preparation.libraries).toEqual(checked.activity.preparation.libraries);expect(JSON.parse(out).identities).toEqual(checked.identities);
