@@ -11,7 +11,17 @@
          self.toggleButtonVisibility(STATE_CHECKING);
 --- a/H5P.QuestionSet-1.21/js/questionset.js
 +++ b/H5P.QuestionSet-1.21/js/questionset.js
-@@ -732,12 +732,15 @@
+@@ -728,16 +728,24 @@
+           scoreBar = H5P.JoubelUI.createScoreBar(totals);
+         }
+         scoreBar.appendTo($('.feedback-scorebar', $myDom));
+-        $('.feedback-text', $myDom).html(scoreString);
++        var feedback = $('<div>').html(scoreString).text().trim();
++        var $feedback = self.$resultPage.find('.feedback-text');
++        if (!$feedback.length && feedback) {
++          $feedback = $('<p>', { 'class': 'feedback-text' }).insertBefore(self.$buttonsContainer);
++        }
++        $feedback.text(feedback);
  
          // Announce that the question set is complete
          setTimeout(function () {
