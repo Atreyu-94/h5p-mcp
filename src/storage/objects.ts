@@ -29,6 +29,14 @@ export class Objects {
    CREATE INDEX IF NOT EXISTS ownership ON objects(tenant,owner,state);
    CREATE TABLE IF NOT EXISTS requests(tenant TEXT,owner TEXT,key TEXT,digest TEXT,id TEXT,PRIMARY KEY(tenant,owner,key));
    CREATE TABLE IF NOT EXISTS pointers(tenant TEXT,owner TEXT,name TEXT,id TEXT,PRIMARY KEY(tenant,owner,name));`);
+  this.db.transaction(()=>{
+   if(!this.db.query("SELECT 1 FROM pragma_table_info('objects') WHERE name='cleaned'").get())
+    this.db.exec('ALTER TABLE objects ADD COLUMN cleaned INTEGER NOT NULL DEFAULT 0');
+  }).immediate();
+  this.db.exec(`CREATE INDEX IF NOT EXISTS cleanup_queue ON objects(cleaned,state,expires);
+   CREATE INDEX IF NOT EXISTS staging_lease ON objects(state,lease);
+   CREATE INDEX IF NOT EXISTS request_object ON requests(id);
+   CREATE INDEX IF NOT EXISTS pointer_object ON pointers(id)`);
   await this.collect();
  }
  private row(id:string):Row {
@@ -68,6 +76,11 @@ export class Objects {
   this.row(id); // Recheck expiry/revocation after I/O.
   return {id,kind:row.kind,expires:row.expires,root,metadata:JSON.parse(row.metadata),files:JSON.parse(row.files)};
  }
+ payloadSize(id:string,kind:Kind):number {
+  const row=this.row(id);
+  if(row.kind!==kind)throw storageError('OBJECT_NOT_FOUND');
+  return JSON.parse(row.files).payload.size;
+ }
  async read(id:string,kind:Kind,file='payload'):Promise<Buffer> {
   const value=await this.get(id,kind);
   if(!Object.hasOwn(value.files,file)) throw storageError('OBJECT_NOT_FOUND');
@@ -106,7 +119,7 @@ export class Objects {
     const global=this.db.query('SELECT COUNT(*) AS count,COALESCE(SUM(bytes),0) AS bytes FROM objects').get() as Native;
     if(global.count>=32768||global.bytes+this.budgets.bytes>8589934592)throw storageError('LIMIT_EXCEEDED');
     const fresh=randomBytes(16).toString('hex');
-    this.db.query('INSERT INTO objects VALUES(?,?,?,?,?,?,?,?,?,?)').run(fresh,this.principal.tenant,this.principal.owner,kind,'staging',this.now()+ttl,this.now()+this.budgets.seconds*1000,JSON.stringify({schemaHash:options.schemaHash}),'{}',this.budgets.bytes);
+    this.db.query('INSERT INTO objects(id,tenant,owner,kind,state,expires,lease,metadata,files,bytes) VALUES(?,?,?,?,?,?,?,?,?,?)').run(fresh,this.principal.tenant,this.principal.owner,kind,'staging',this.now()+ttl,this.now()+this.budgets.seconds*1000,JSON.stringify({schemaHash:options.schemaHash}),'{}',this.budgets.bytes);
     if(options.key) this.db.query('INSERT OR REPLACE INTO requests VALUES(?,?,?,?,?)').run(this.principal.tenant,this.principal.owner,options.key,options.digest!,fresh);
     return {id:fresh};
    }).immediate();
@@ -134,11 +147,16 @@ export class Objects {
    }).immediate();
    return await this.get(id,kind);
   }catch(error){
-   this.db.query("UPDATE objects SET state='failed',bytes=0,expires=? WHERE id=? AND state='staging'").run(this.now(),id);
-   await fs.rm(stage,{recursive:true,force:true});
-   // A completed object is never deleted on a failed post-commit read.
-   const state=this.db.query('SELECT state FROM objects WHERE id=?').get(id) as Native;
-   if(state.state!=='ready') await fs.rm(final,{recursive:true,force:true});
+   const now=this.now();
+   const claim=this.db.query("UPDATE objects SET state='failed',bytes=0,expires=?,cleaned=2,lease=? WHERE id=? AND state='staging'").run(now,now+this.budgets.seconds*1000,id);
+   if(claim.changes)await this.cleanFiles(id);
+   else{
+    // A late writer can finish staging after its lease was collected.
+    // Preserve a committed payload if only the post-commit integrity read failed.
+    await fs.rm(stage,{recursive:true,force:true});
+    const row=this.db.query('SELECT state FROM objects WHERE id=?').get(id) as Row|null;
+    if(row?.state!=='ready')await fs.rm(final,{recursive:true,force:true});
+   }
    throw error;
   }
  }
@@ -152,26 +170,46 @@ export class Objects {
  }
  async revoke(id:string) {
   this.row(id);
-  this.db.query("UPDATE objects SET state='deleted',bytes=0,expires=? WHERE id=? AND tenant=? AND owner=?").run(this.now(),id,this.principal.tenant,this.principal.owner);
-  await fs.rm(path.join(this.root,'objects',id),{recursive:true,force:true});
+  const now=this.now();
+  this.db.query("UPDATE objects SET state='deleted',bytes=0,expires=?,cleaned=2,lease=? WHERE id=? AND tenant=? AND owner=?").run(now,now+this.budgets.seconds*1000,id,this.principal.tenant,this.principal.owner);
+  await this.cleanFiles(id);
  }
  async activate(name:string,id:string) {
   await this.get(id,'libraries');
   this.db.query('INSERT OR REPLACE INTO pointers VALUES(?,?,?,?)').run(this.principal.tenant,this.principal.owner,name,id);
  }
  active(name:string):string|undefined {return (this.db.query('SELECT id FROM pointers WHERE tenant=? AND owner=? AND name=?').get(this.principal.tenant,this.principal.owner,name) as Native)?.id;}
+ private async cleanFiles(id:string) {
+  try{
+   for(const suffix of ['.staging',''])await fs.rm(path.join(this.root,'objects',id+suffix),{recursive:true,force:true});
+   this.db.query('UPDATE objects SET cleaned=1 WHERE id=?').run(id);
+  }catch(error){
+   this.db.query('UPDATE objects SET cleaned=0 WHERE id=? AND cleaned=2').run(id);
+   throw error;
+  }
+ }
  async collect() {
-  const expired=this.db.transaction(()=>{
-   const rows=this.db.query("SELECT id FROM objects WHERE (state='staging' AND lease<=?) OR (state='ready' AND expires<=?) OR state IN ('failed','deleted','expired')").all(this.now(),this.now()) as Array<{id:string}>;
-   for(const {id} of rows)this.db.query("UPDATE objects SET state=CASE WHEN state='staging' THEN 'failed' WHEN state='ready' THEN 'expired' ELSE state END,expires=CASE WHEN state='staging' THEN ? ELSE expires END,bytes=0 WHERE id=?").run(this.now(),id);
-   return rows;
-  }).immediate();
-  for(const {id} of expired) for(const suffix of ['', '.staging']) await fs.rm(path.join(this.root,'objects',id+suffix),{recursive:true,force:true});
+  // cleaned: 0 pending, 1 complete, 2 leased to a collector or revoking writer.
+  const claim=this.db.query(`UPDATE objects SET
+   state=CASE WHEN state='staging' THEN 'failed' WHEN state='ready' THEN 'expired' ELSE state END,
+   expires=CASE WHEN state='staging' THEN ?1 ELSE expires END, bytes=0, cleaned=2, lease=?2
+   WHERE id=(SELECT id FROM objects WHERE
+    (cleaned=0 AND ((state='staging' AND lease<=?1) OR (state='ready' AND expires<=?1) OR state IN ('failed','deleted','expired')))
+    OR (cleaned=2 AND lease<=?1) LIMIT 1) RETURNING id`);
+  for(let i=0;i<32;i++){
+   const now=this.now(),row=claim.get(now,now+this.budgets.seconds*1000) as {id:string}|null;
+   if(!row)break;
+   await this.cleanFiles(row.id);
+  }
   this.db.transaction(()=>{
    const cutoff=this.now()-86400000;
-   this.db.query("DELETE FROM objects WHERE state IN ('failed','deleted','expired') AND expires<=?").run(cutoff);
-   this.db.exec('DELETE FROM requests WHERE id NOT IN (SELECT id FROM objects); DELETE FROM pointers WHERE id NOT IN (SELECT id FROM objects)');
+   const purged=this.db.query('SELECT id FROM objects WHERE cleaned=1 AND expires<=? LIMIT 32').all(cutoff) as Array<{id:string}>;
+   for(const {id} of purged){
+    this.db.query('DELETE FROM requests WHERE id=?').run(id);
+    this.db.query('DELETE FROM pointers WHERE id=?').run(id);
+    this.db.query('DELETE FROM objects WHERE id=?').run(id);
+   }
   }).immediate();
  }
- close(){this.db.close();}
+ close(){this.db?.close();}
 }

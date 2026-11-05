@@ -1,4 +1,4 @@
-import {test,expect} from 'bun:test';
+import {test,expect,spyOn} from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,9 +7,72 @@ import {spawnSync} from 'node:child_process';
 import {Database} from 'bun:sqlite';
 import {Objects,digest} from '../../src/storage/objects.js';
 import {upload} from '../../src/storage/uploads.js';
-import {compatibility} from '../../src/storage/vault.js';
+import {compatibility,Vault} from '../../src/storage/vault.js';
+import {Service} from '../../src/adapters/service.js';
 const principal={tenant:'school-a',owner:'teacher-a'};
 const writer=async(stage:string)=>{await fs.writeFile(path.join(stage,'payload'),'complete');return {mime:'application/zip'};};
+test('preparation rejects over-budget unique assets before copying and stages aliases only once',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-prepare-budget-'));
+ const store=new Objects(path.join(root,'store'),principal,Date.now,{bytes:4096,tenantBytes:32768,count:20,seconds:30});
+ const vault=new Vault(store,path.join(root,'data'));
+ try{
+  await store.initialize();const snapshot=await vault.snapshot();
+  const asset=()=>store.publish('asset',60000,async stage=>{
+   await fs.writeFile(path.join(stage,'payload'),Buffer.alloc(2300));return {mime:'image/png'};
+  });
+  const a=await asset(),b=await asset();
+  const prepare=(assets:Record<string,string>)=>vault.prepare({title:'Example',library:'H5P.Missing 1.0',params:{},assets},1000,snapshot.id);
+  const writes=spyOn(fs,'writeFile');
+  const stagedBytes=()=>writes.mock.calls.reduce((n,[file,data])=>n+(String(file).includes(path.sep+'assets'+path.sep)&&Buffer.isBuffer(data)?data.length:0),0);
+  try{
+   await expect(prepare({a:a.id,b:b.id})).rejects.toMatchObject({code:'LIMIT_EXCEEDED'});
+   expect(stagedBytes()).toBe(0);
+   await expect(prepare({a:a.id,b:a.id})).rejects.toMatchObject({code:'SCHEMA_VALIDATION_FAILED'});
+   expect(stagedBytes()).toBe(2300);
+  }finally{writes.mockRestore();}
+ }finally{await vault.close();await fs.rm(root,{recursive:true,force:true});}
+});
+test('automatic snapshot selection renews expired libraries and preserves explicit pins and integrity errors',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-renew-'));let now=10000;
+ const store=new Objects(path.join(root,'store'),principal,()=>now),vault=new Vault(store,path.join(root,'data'));
+ try{
+  await store.initialize();const old=await vault.snapshot();now=old.expires+1;
+  await expect(vault.prepare({title:'X',library:'H5P.Test 1.0',params:{}},1000,old.id)).rejects.toMatchObject({code:'OBJECT_EXPIRED'});
+  const renewed=await vault.snapshot();expect(renewed.id).not.toBe(old.id);expect(store.active('libraries')).toBe(renewed.id);
+  await fs.writeFile(path.join(renewed.root,'libraries.lock.json'),'corrupt');
+  await expect(vault.snapshot()).rejects.toMatchObject({code:'OBJECT_INTEGRITY_FAILED'});
+ }finally{await vault.close();await fs.rm(root,{recursive:true,force:true});}
+});
+test('failed vault initialization releases the database and the same service can retry',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-init-retry-'));
+ const service=new Service(principal,{store:root});
+ const fault=spyOn(Objects.prototype,'collect').mockRejectedValueOnce(new Error('temporary failure'));
+ const closed=spyOn(Objects.prototype,'close');
+ try{
+  const first=service.vault();expect(service.vault()).toBe(first);
+  await expect(first).rejects.toThrow('temporary failure');expect(closed).toHaveBeenCalledTimes(1);
+  const retry=service.vault();expect(service.vault()).toBe(retry);expect(await retry).toBeInstanceOf(Vault);
+ }finally{fault.mockRestore();closed.mockRestore();await service.close();await fs.rm(root,{recursive:true,force:true});}
+});
+test('collection migrates old tombstones, bounds physical work and remembers successful cleanup across tenants',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-cleanup-'));
+ const db=new Database(path.join(root,'index.sqlite'),{create:true});
+ db.exec('CREATE TABLE objects(id TEXT PRIMARY KEY,tenant TEXT,owner TEXT,kind TEXT,state TEXT,expires INTEGER,lease INTEGER,metadata TEXT,files TEXT,bytes INTEGER)');
+ for(let i=0;i<40;i++)db.query("INSERT INTO objects VALUES(?, 'A','owner','asset','failed',?,0,'{}','{}',0)").run(i.toString(16).padStart(32,'0'),Date.now());
+ db.close();
+ const store=new Objects(root,{tenant:'B',owner:'user'}),remove=spyOn(fs,'rm');
+ try{
+  await store.initialize();expect(remove.mock.calls.length).toBe(64);
+  remove.mockClear();remove.mockRejectedValueOnce(Object.assign(new Error('busy'),{code:'EBUSY'}));
+  await expect(store.collect()).rejects.toMatchObject({code:'EBUSY'});
+  const other=new Objects(root,{tenant:'A',owner:'owner'});
+  remove.mockClear();
+  try{await Promise.all([store.collect(),other.initialize()]);}
+  finally{other.close();}
+  expect(remove.mock.calls.length).toBe(16);
+  remove.mockClear();await store.collect();expect(remove.mock.calls.length).toBe(0);
+ }finally{remove.mockRestore();store.close();await fs.rm(root,{recursive:true,force:true});}
+});
 test('schema reads reuse one live object per owner and digest, including concurrent reads',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-schema-'));let now=1000;
  const a=new Objects(root,principal,()=>now),b=new Objects(root,{...principal,owner:'other'},()=>now);

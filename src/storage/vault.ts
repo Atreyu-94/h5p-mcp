@@ -34,8 +34,14 @@ export class Vault {
  private pool=new Pool(2,8);
  constructor(readonly objects:Objects,readonly source:string,readonly engine=new Engine()){}
  upload(kind:'asset'|'package',mime:string,input:AsyncIterable<Uint8Array>,ttl=day,signal?:AbortSignal,figureSource?:string){return upload(this.objects,kind,mime,input,ttl,signal,figureSource);}
- async snapshot(fresh=false,signal=AbortSignal.timeout(300000)):Promise<Stored> {
-  const active=this.objects.active('libraries');if(active&&!fresh)return this.objects.get(active,'libraries');
+ async snapshot(fresh=false,signal=AbortSignal.timeout(300000),minimumTtl=0):Promise<Stored> {
+  const active=this.objects.active('libraries');
+  if(active&&!fresh){
+   try{
+    const current=await this.objects.get(active,'libraries');
+    if(current.expires>=this.objects.now()+minimumTtl)return current;
+   }catch(error){if((error as NodeJS.ErrnoException).code!=='OBJECT_EXPIRED')throw error;}
+  }
   const generations=new Generations();
   try {
    const pinned=await exclusive(this.source,signal,()=>generations.acquire(this.source,signal));
@@ -72,23 +78,37 @@ export class Vault {
  async prepare(input:Native,ttl=day,snapshotID?:string,callerSignal?:AbortSignal,source=false) {
   const contract=source?'stored_source':'prepare_remote_input';
   if(!valid(contract,input))throw invalidInput(contract);
-  const snapshot=snapshotID?await this.objects.get(snapshotID,'libraries'):await this.snapshot(false,callerSignal);
+  const snapshot=snapshotID?await this.objects.get(snapshotID,'libraries'):await this.snapshot(false,callerSignal,ttl);
   if(snapshot.expires<this.objects.now()+ttl)throw storageError('OBJECT_EXPIRED');
   return this.objects.publish('preparation',ttl,async(stage,final,signal)=>{
-   const assets:Record<string,string>={},finalAssets:Record<string,string>={};let index=0;
-   await fs.mkdir(path.join(stage,'assets'));
+   const assets:Record<string,string>=Object.create(null),finalAssets:Record<string,string>=Object.create(null);
+   const files=new Map<string,string>();let planned=0,written=0;
    for(const [name,id] of Object.entries(input.assets||{}) as Array<[string,string]>) {
-    const asset=await this.objects.get(id,'asset');
-    const extension=uploadExtension(asset.metadata.mime);if(!extension)throw storageError('MIME_MISMATCH');
-    const file='asset-'+index++ +'.'+extension;
-    const bytes=await this.objects.read(id,'asset');
+    signal.throwIfAborted();
+    let file=files.get(id);
+    if(!file){
+     planned+=this.objects.payloadSize(id,'asset');
+     if(planned>this.objects.budgets.bytes)throw storageError('LIMIT_EXCEEDED');
+     const asset=await this.objects.get(id,'asset');
+     const extension=uploadExtension(asset.metadata.mime);if(!extension)throw storageError('MIME_MISMATCH');
+     file='asset-'+files.size+'.'+extension;files.set(id,file);
+    }
     assets[name]=path.join(stage,'assets',file);finalAssets[name]=path.join(final,'assets',file);
-    await fs.writeFile(assets[name],bytes,{flag:'wx'});
+   }
+   await fs.mkdir(path.join(stage,'assets'));
+   for(const [id,file] of files){
+    signal.throwIfAborted();
+    const bytes=await this.objects.read(id,'asset');
+    written+=bytes.length;
+    if(written>this.objects.budgets.bytes)throw storageError('LIMIT_EXCEEDED');
+    await fs.writeFile(path.join(stage,'assets',file),bytes,{flag:'wx',signal});
    }
    const result:Native=await this.pool.run(()=>isolated({action:source?'compile':'prepare',data_dir:path.join(snapshot.root,'data'),...(source?{source:{...input,assets}}:{activity:{language:'en',license:'U',...input,assets}})},signal,[path.join(stage,'assets')]),signal);
    if(!result.ok)throw Object.assign(storageError('SCHEMA_VALIDATION_FAILED'),{details:result.diagnostics,feedback:feedback(result)});
    const activity={...result.activity,assets:finalAssets};
-   await fs.writeFile(path.join(stage,'preparation.json'),JSON.stringify({activity,library_snapshot_id:snapshot.id}));
+   const document=JSON.stringify({activity,library_snapshot_id:snapshot.id});
+   if(written+Buffer.byteLength(document)>this.objects.budgets.bytes)throw storageError('LIMIT_EXCEEDED');
+   await fs.writeFile(path.join(stage,'preparation.json'),document,{signal});
    return {library_snapshot_id:snapshot.id,title:activity.title,library:activity.library,feedback:feedback(result)};
   },{signal:callerSignal});
  }

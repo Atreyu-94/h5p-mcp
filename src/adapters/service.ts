@@ -51,7 +51,8 @@ export class Service {
  vault() {
   return this.vaultPromise??=(async()=>{
    const objects=new Objects(this.store,this.principal);
-   await objects.initialize();return new Vault(objects,this.data);
+   try{await objects.initialize();return new Vault(objects,this.data);}
+   catch(error){objects.close();this.vaultPromise=undefined;throw error;}
   })();
  }
  stored(value:Stored):Native {
