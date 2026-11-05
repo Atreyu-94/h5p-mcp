@@ -1,0 +1,35 @@
+--- a/H5P.Blanks-1.14/js/blanks.js
++++ b/H5P.Blanks-1.14/js/blanks.js
+@@ -200,7 +200,7 @@
+       // Check answer button
+       self.addButton('check-answer', self.params.checkAnswer, function () {
+         // Move focus to top of content
+-        self.a11yHeader.innerHTML = self.params.a11yHeader;
++        self.a11yHeader.textContent = self.params.a11yCheckingModeHeader || self.params.a11yHeader;
+         self.a11yHeader.focus();
+ 
+         self.toggleButtonVisibility(STATE_CHECKING);
+--- a/H5P.QuestionSet-1.21/js/questionset.js
++++ b/H5P.QuestionSet-1.21/js/questionset.js
+@@ -732,12 +732,15 @@
+ 
+         // Announce that the question set is complete
+         setTimeout(function () {
+-          self.$progressAnnouncer
+-            .html(eparams.message +
+-                  scoreString + '.' +
+-                  (params.endGame.scoreBarLabel).replace('@finals', finals).replace('@totals', totals) + '.' +
+-                  eparams.comment + '.' +
+-                  eparams.resulttext);
++          var announcement = [
++            eparams.message, scoreString,
++            params.endGame.scoreBarLabel.replace('@finals', finals).replace('@totals', totals),
++            eparams.comment, eparams.resulttext
++          ].filter(Boolean).map(function (part) {
++            var text = $('<div>').html(part).text().trim();
++            return text && !/[.!?…]$/.test(text) ? text + '.' : text;
++          }).filter(Boolean).join(' ');
++          self.$progressAnnouncer.text(announcement);
+ 
+           scoreBar.setMaxScore(totals);
+           scoreBar.setScore(finals);
