@@ -13,6 +13,11 @@ export class Engine {
    const mutation=request.action==='setup'||request.refresh||request.install_if_missing;
    if(mutation) return isolated(request,signal);
    if(request.action==='validate') return isolated(request,signal);
+   if(request.action==='discover')return exclusive(request.data_dir,signal,async()=>{
+    // Discovery reports metadata; only content operations need a pinned runtime tree.
+    const {execute}=await import('./execute.js');
+    signal.throwIfAborted();const result=await execute(request);signal.throwIfAborted();return result;
+   });
    const snapshot=await exclusive(request.data_dir,signal,()=>this.generations.acquire(request.data_dir,signal));
    try {
     const pinned={...request,data_dir:snapshot.root};

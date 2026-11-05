@@ -7,7 +7,7 @@ import {installPackage} from './packages.js';
 import {readBounded} from '../infrastructure/read-bounded.js';
 import {checkTree,limit} from '../domain/limits.js';
 import type {Native} from '../domain/types.js';
-export async function readStore(root:string,name:string){try{const value=JSON.parse((await readBounded(path.join(root,name),16777216)).toString('utf8'));checkTree(value);return value;}catch(error:Native){if(error.code==='ENOENT')return {};throw error;}}
+export async function readStore(root:string,name:string){try{const filename=path.join(root,name);if(!(await fs.lstat(filename)).isFile())throw Object.assign(new Error('Invalid catalog file'),{code:'OBJECT_INTEGRITY_FAILED'});const value=JSON.parse((await readBounded(filename,16777216)).toString('utf8'));checkTree(value);return value;}catch(error:Native){if(error.code==='ENOENT')return {};throw error;}}
 async function save(root:string,name:string,value:Native){await fs.mkdir(root,{recursive:true});const tmp=path.join(root,name+'.'+randomUUID()+'.tmp');try{await fs.writeFile(tmp,JSON.stringify(value),{flag:'wx'});await fs.rename(tmp,path.join(root,name));}finally{await fs.rm(tmp,{force:true});}}
 export async function hubRequest(url:string,options:RequestInit={},maximum=16777216){
  const target=new URL(url);if(target.protocol!=='https:'&&!(target.protocol==='http:'&&['127.0.0.1','localhost'].includes(target.hostname)))throw new Error('Invalid Hub URL');
@@ -17,7 +17,7 @@ export async function hubRequest(url:string,options:RequestInit={},maximum=16777
 export async function nativeCatalog(root:string){
  const libraries=path.join(root,'libraries'),repo=new FileLibraryRepository(libraries),config=await readStore(root,'config.json');
  const endpoint=config.hubContentTypesEndpoint||'https://hub-api.h5p.org/v1/content-types/';
- const list=async()=>{const result:Record<string,Native[]>={};let dirs;try{dirs=await fs.readdir(libraries,{withFileTypes:true});}catch(error:Native){if(error.code==='ENOENT')return result;throw error;}
+ const list=async()=>{const result:Record<string,Native[]>={};let dirs;try{if(!(await fs.lstat(libraries)).isDirectory())throw Object.assign(new Error('Invalid library root'),{code:'OBJECT_INTEGRITY_FAILED'});dirs=await fs.readdir(libraries,{withFileTypes:true});}catch(error:Native){if(error.code==='ENOENT')return result;throw error;}
  if(dirs.length>limit('LIBRARIES',1000))throw new Error('Library count exceeded');for(const dir of dirs){if(!dir.isDirectory()||dir.isSymbolicLink())throw new Error('Invalid library directory');const meta=JSON.parse((await readBounded(path.join(libraries,dir.name,'library.json'),2097152)).toString('utf8'));await repo.getLibrary(meta);(result[meta.machineName]??=[]).push(meta);}return result;};
  const cache={
   forceUpdate:async()=>{

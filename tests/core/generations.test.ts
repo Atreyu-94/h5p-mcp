@@ -5,11 +5,63 @@ import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
+import {Engine} from '../../src/application/engine.js';
 import {Generations,exclusive} from '../../src/infrastructure/generations.js';
 
 function acquire(generations:Generations,source:string,signal=AbortSignal.timeout(30000)){
  return exclusive(source,signal,()=>generations.acquire(source,signal));
 }
+
+test('discovery reads current metadata under the source lease without creating a generation',async()=>{
+ const {root}=await fixture(),engine=new Engine();
+ const request={action:'discover' as const,data_dir:root,installed_only:true,offset:0,limit:100};
+ try{
+  const result=await engine.run(request) as {activities:Array<{title:string}>};
+  expect(result.activities[0].title).toBe('Test');
+  expect(await fs.exists(path.join(root,'.h5p-generations-v2'))).toBe(false);
+  await exclusive(root,AbortSignal.timeout(3000),async()=>{
+   await expect(engine.run(request,AbortSignal.timeout(50))).rejects.toBeDefined();
+  });
+  const file=path.join(root,'libraries/H5P.Test-1.0/library.json');
+  const meta=JSON.parse(await fs.readFile(file,'utf8'));meta.title='Changed';await fs.writeFile(file,JSON.stringify(meta));
+  expect((await engine.run(request) as typeof result).activities[0].title).toBe('Changed');
+  const outside=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-catalog-outside-'));
+  try{
+   await fs.rename(path.join(root,'libraries'),path.join(root,'real-libraries'));
+   await fs.symlink(outside,path.join(root,'libraries'),'junction');
+   await expect(engine.run(request)).rejects.toMatchObject({code:'OBJECT_INTEGRITY_FAILED'});
+  }finally{await fs.unlink(path.join(root,'libraries'));await fs.rm(outside,{recursive:true,force:true});}
+ }finally{await engine.close();await fs.rm(root,{recursive:true,force:true});}
+});
+
+test('concurrent fingerprinting preserves the v2 key, empty directories and independent copied bytes',async()=>{
+ const {root,asset}=await fixture(),gen=new Generations();
+ try{
+  await fs.mkdir(path.join(root,'libraries/H5P.Test-1.0/empty'));
+  // More files than slots, with multi-chunk reads, exercise buffer reuse and ordering.
+  for(let i=0;i<25;i++)await fs.writeFile(path.join(root,'libraries/H5P.Test-1.0',`asset-${i}.bin`),Buffer.alloc(65536+i*7,i));
+  const sha=(value:Buffer|string)=>createHash('sha256').update(value).digest();
+  const tree=createHash('sha256');
+  async function originalWalk(dir:string,prefix=''){
+   const entries=await fs.readdir(dir,{withFileTypes:true});
+   for(const entry of entries.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0)){
+    const name=path.posix.join(prefix,entry.name),filename=path.join(dir,entry.name);
+    tree.update((entry.isDirectory()?'D':'F')+name+'\0');
+    if(entry.isDirectory())await originalWalk(filename,name);else tree.update(sha(await fs.readFile(filename)));
+   }
+  }
+  await originalWalk(path.join(root,'libraries'));
+  const expected=createHash('sha256').update('.h5p-generations-v2').update(tree.digest()).update(sha('{}')).update(sha('{}')).digest('hex');
+  const lease=await acquire(gen,root);
+  try{
+   expect(path.basename(path.dirname(lease.root))).toBe(expected);
+   expect((await fs.stat(path.join(lease.root,'libraries/H5P.Test-1.0/empty'))).isDirectory()).toBe(true);
+   await fs.writeFile(asset,'new');
+   expect(await fs.readFile(path.join(lease.root,'libraries/H5P.Test-1.0/test.css'),'utf8')).toBe('old');
+  }finally{await lease.release();}
+ }finally{await gen.close();await fs.rm(root,{recursive:true,force:true});}
+});
 async function fixture(){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-generation-v1-'));
  const library=path.join(root,'libraries','H5P.Test-1.0');
@@ -26,7 +78,7 @@ async function fixture(){
 test('restart verifies published bytes, repairs damage and keys same-size edits and settings',async()=>{
  const {root,asset}=await fixture();
  const first=new Generations(),next=new Generations();
- const copy=spyOn(fs,'cp');
+ const copy=spyOn(fs,'copyFile');
  try{
   const original=await acquire(first,root);
   const oldRoot=original.root;
@@ -57,8 +109,8 @@ test('aborted copy leaves previous generation and ephemeral fallback cleans its 
  const mode=process.env.H5P_MCP_GENERATION_CACHE;
  try{
   const old=await acquire(gen,root);await old.release();await fs.writeFile(asset,'new');
-  const abort=new AbortController(),cp=fs.cp;
-  const copying=spyOn(fs,'cp').mockImplementation(async(...args)=>{await cp(...args);abort.abort();});
+  const abort=new AbortController(),cp=fs.copyFile;
+  const copying=spyOn(fs,'copyFile').mockImplementation(async(...args)=>{await cp(...args);abort.abort();});
   try{await expect(acquire(gen,root,abort.signal)).rejects.toBeDefined();}finally{copying.mockRestore();}
   expect(await fs.readFile(path.join(old.root,'libraries','H5P.Test-1.0','test.css'),'utf8')).toBe('old');
   expect((await fs.readdir(path.dirname(path.dirname(old.root)))).sort()).toEqual(['.owned-by-h5p-mcp-v2',path.basename(path.dirname(old.root))].sort());

@@ -6,6 +6,7 @@ import {Database} from 'bun:sqlite';
 import {setTimeout as delay} from 'node:timers/promises';
 import {limit} from '../domain/limits.js';
 import {readBounded} from './read-bounded.js';
+import {mapFiles} from './file-work.js';
 
 /** SQLite owns the live lease. The hard link also excludes legacy mkdir clients. */
 export async function exclusive<T>(root:string,signal:AbortSignal,work:()=>Promise<T>):Promise<T> {
@@ -49,46 +50,38 @@ const missing=(error:unknown)=>(error as NodeJS.ErrnoException).code==='ENOENT';
 class SnapshotBudget extends Error {}
 
 async function fingerprint(root:string,source:boolean,signal?:AbortSignal) {
- const tree=hash(),buffers=Array.from({length:8},()=>Buffer.alloc(65536));
- const batch:string[]=[];
+ const tree=hash(),entries:Array<{name:string;directory:boolean}>=[];
+ const buffers=Array.from({length:8},()=>Buffer.alloc(65536));
  let files=0,bytes=0;
- async function digestFile(name:string,buffer:Buffer) {
-  const file=await fs.open(path.join(root,'libraries',name),'r'),content=hash();
+ async function digestFile(name:string) {
+  const buffer=buffers.pop()!;
   try {
-   while(true){
-    signal?.throwIfAborted();
-    const {bytesRead}=await file.read(buffer);if(!bytesRead)break;
-    bytes+=bytesRead;if(bytes>limit('ZIP_BYTES',536870912))throw new SnapshotBudget('Snapshot byte budget exceeded');
-    content.update(buffer.subarray(0,bytesRead));
-   }
-  }finally{await file.close();}
-  return content.digest();
- }
- async function flush(){
-  if(!batch.length)return;
-  // Drain every handle before propagating an abort or releasing the source lock.
-  const results=await Promise.allSettled(batch.map((name,i)=>digestFile(name,buffers[i])));
-  for(const [i,result] of results.entries()){
-   if(result.status==='rejected')throw result.reason;
-   tree.update('F'+batch[i]+'\0').update(result.value);
-  }
-  batch.length=0;
+   const file=await fs.open(path.join(root,'libraries',name),'r'),content=hash();
+   try {
+    while(true){
+     signal?.throwIfAborted();
+     const {bytesRead}=await file.read(buffer);if(!bytesRead)break;
+     bytes+=bytesRead;if(bytes>limit('ZIP_BYTES',536870912))throw new SnapshotBudget('Snapshot byte budget exceeded');
+     content.update(buffer.subarray(0,bytesRead));
+    }
+   }finally{await file.close();}
+   return content.digest();
+  }finally{buffers.push(buffer);}
  }
  async function visit(directory:string,relative:string,depth:number):Promise<void> {
   if(depth>32) throw new SnapshotBudget('Library path too deep');
-  const entries=await fs.readdir(directory,{withFileTypes:true});
-  for(const entry of entries.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0)) {
+  const children=await fs.readdir(directory,{withFileTypes:true});
+  for(const entry of children.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0)) {
    signal?.throwIfAborted();
    const name=path.posix.join(relative,entry.name);
+   if(entries.length>=limit('ZIP_MEMBERS',20000))throw new SnapshotBudget('Snapshot entry budget exceeded');
    if(entry.isDirectory()) {
-    await flush();
-    tree.update('D'+name+'\0');
+    entries.push({name,directory:true});
     await visit(path.join(directory,entry.name),name,depth+1);
    } else {
     if(!entry.isFile())throw integrity();
     if(++files>limit('ZIP_MEMBERS',20000))throw new SnapshotBudget('Snapshot file budget exceeded');
-    batch.push(name);
-    if(batch.length===buffers.length)await flush();
+    entries.push({name,directory:false});
    }
   }
  }
@@ -98,7 +91,13 @@ async function fingerprint(root:string,source:boolean,signal?:AbortSignal) {
  if(stat) {
   if(!stat.isDirectory())throw integrity();
   await visit(libraries,'',0);
-  await flush();
+  const digests=await mapFiles(entries.filter(e=>!e.directory),e=>digestFile(e.name),signal);
+  // Scheduling may differ, but the v2 identity keeps its original traversal order.
+  let index=0;
+  for(const entry of entries){
+   tree.update((entry.directory?'D':'F')+entry.name+'\0');
+   if(!entry.directory)tree.update(digests[index++]);
+  }
  }
  const key=hash().update(cacheName).update(tree.digest()),config:Record<string,Buffer>={};
  for(const name of configNames) {
@@ -110,7 +109,7 @@ async function fingerprint(root:string,source:boolean,signal?:AbortSignal) {
   key.update(hash().update(config[name]).digest());
  }
  if(!source && (await fs.readdir(root)).length!==3)throw integrity();
- return {key:key.digest('hex'),config,hasLibraries:!!stat};
+ return {key:key.digest('hex'),config,entries};
 }
 
 // A read transaction pins this directory across processes. The source lock serializes
@@ -207,10 +206,15 @@ export class Generations {
    try {
     const data=path.join(stage,'data'),libraries=path.join(data,'libraries');
     await fs.mkdir(data);
-    if(input.hasLibraries)await fs.cp(path.join(source,'libraries'),libraries,{
-     recursive:true,errorOnExist:true,force:false,filter:()=>{signal?.throwIfAborted();return true;}
-    });
-    else await fs.mkdir(libraries);
+    await fs.mkdir(libraries);
+    for(const entry of input.entries)if(entry.directory){
+     signal?.throwIfAborted();await fs.mkdir(path.join(libraries,entry.name));
+    }
+    await mapFiles(input.entries.filter(e=>!e.directory),async entry=>{
+     const filename=path.join(source,'libraries',entry.name);
+     if(!(await fs.lstat(filename)).isFile())throw integrity();
+     await fs.copyFile(filename,path.join(libraries,entry.name),fs.constants.COPYFILE_EXCL);
+    },signal);
     for(const name of configNames)await fs.writeFile(path.join(data,name),input.config[name],{flag:'wx'});
     if((await fingerprint(source,true,signal)).key!==input.key||!await verify(stage,input.key,signal))throw integrity();
     const db=new Database(path.join(stage,'readers.sqlite'),{create:true});
