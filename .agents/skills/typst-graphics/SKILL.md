@@ -14,3 +14,7 @@ Call local `render_typst_figure` with the source and short alternative text. Rev
 The repository examples in `examples/scientific-figures/` include Spanish data, prompts and feedback. They exercise the source interface without restricting what can be drawn. At desktop, narrow width and true browser zoom check the size actually displayed by H5P, the adjacent text alternative and the keyboard path through an incorrect attempt, retry and correct feedback. Record separately what a real screen reader announced.
 
 For thumbnail media with an overlaid expand control, inspect the usable drawing area before enlargement. Reserve only the clearance that control needs and check the smallest subscript or bond at the displayed size with the course navigation open.
+
+Check the outermost ink and whitespace on every edge of the exported bitmap. For equations, compare each subscript with the editable source at initial display size. Distinguish observed data markers from the model curve and use integer major ticks for discrete observations when intermediate values have no meaning.
+
+Apply the visual checks to the generating template and the embedded PNG. Derive automatic page bounds from the content and use modest margins on all sides. If an expansion control obscures a formula at the initial display size, rearrange the equation or molecular layout and inspect the new thumbnail before export. Keep reaction direction, coefficients, subscripts and alternative text equivalent. A successful render verifies file generation; inspect the actual image for visual meaning.
