@@ -15,3 +15,5 @@ The learner sees two labelled samples in [the editable source](../examples/densi
 - If explanations mention only mass, compare B with a third sample of 400 g in 100 cm³. If students explain the ratio, invite them to invent another pair with equal density and show how they know.
 
 A teacher can use the explanation to choose the next task even when the prediction was correct. Keep these hypotheses in the teacher note. The exported question contains the learner's data, options and feedback.
+
+For weighted sets, tell learners the point value of each question and any deduction before the attempt. Distinguish progress in questions from results in points. On a wrong attempt give a next operation or observation. Reserve the worked explanation for success or review. If the teacher wants independent reasoning, collect a prediction or justification before hints and retries. A score alone records the response.
