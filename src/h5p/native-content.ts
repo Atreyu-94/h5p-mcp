@@ -92,6 +92,6 @@ export async function executeNative(request:CoreRequest) {
   }catch(error){zip.outputStream.destroy();await writing.catch(()=>{});throw error;}
   const after=await nativeManifest(libraries,report.activity,report.mathematics);
   if(!sameNativeManifest(report.activity.preparation,after))throw fail('STALE_PREPARATION','Files changed during export');
-  return {svg_content:[...media.keys()].some(file=>file.endsWith('.svg')),h5p_json:h5p,content_json:uploaded.activity.params,preparation_manifest:after,verification:{structure:'passed',semantics:'passed',importation:'not_run',playback:'not_run',grading:'not_run'},export_mode:request.export_mode??'content-only'};
+  return {warnings:report.warnings,mathematics:report.mathematics,mathWarnings:report.mathWarnings,svg_content:[...media.keys()].some(file=>file.endsWith('.svg')),h5p_json:h5p,content_json:uploaded.activity.params,preparation_manifest:after,verification:{structure:'passed',semantics:'passed',importation:'not_run',playback:'not_run',grading:'not_run'},export_mode:request.export_mode??'content-only'};
  }finally{await fs.rm(stage,{recursive:true,force:true});}
 }

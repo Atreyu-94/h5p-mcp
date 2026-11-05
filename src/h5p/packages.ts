@@ -99,8 +99,10 @@ export async function validatePackage(filename:string,installedLibraries?:string
  for(const item of libraries)await resolveLibraries(repo,{library:item.name,params:{}});
  for(const kind of ['preloadedDependencies','dynamicDependencies'])for(const item of meta[kind]||[])await resolveLibraries(repo,{library:`${item.machineName} ${item.majorVersion}.${item.minorVersion}`,params:{}});
  const previous=process.env.H5P_MCP_ASSET_ROOTS;process.env.H5P_MCP_ASSET_ROOTS=JSON.stringify([path.join(root,'content')]);
+ let warnings:string[]=[];
  try{
   const report=await prepareActivity({libraries:repo,coreApiVersion:{major:1,minor:28}},activity);
+  warnings=report.warnings;
   if(!report.ok)throw Object.assign(fail(),{details:report.diagnostics});
   const graph=await resolveLibraries(repo,report.activity,report.mathematics.detected);
   const required=runtimeDependencies(graph,report.activity,report.mathematics.detected);
@@ -109,5 +111,5 @@ export async function validatePackage(filename:string,installedLibraries?:string
   for(const lib of required.preloaded)if(!preloaded.has(lib))throw fail();
   for(const lib of required.dynamic)if(!preloaded.has(lib)&&!dynamic.has(lib))throw fail();
  }finally{if(previous===undefined)delete process.env.H5P_MCP_ASSET_ROOTS;else process.env.H5P_MCP_ASSET_ROOTS=previous;}
- return {ok:true,package_mode,required_libraries,missing_local_libraries,errors:[],warnings:[],libraries:libraries.length,engine:'native-package-v1'};
+ return {ok:true,package_mode,required_libraries,missing_local_libraries,errors:[],warnings,libraries:libraries.length,engine:'native-package-v1'};
  },true,allowSvgContent);}

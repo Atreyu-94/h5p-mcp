@@ -74,6 +74,7 @@ export async function prepareActivity(context: PreparationContext, activity: Act
         }
         const semantics = await context.libraries.getSemantics(version);
         checkTree(semantics);
+        for(const warning of await context.libraries.getRuntimeWarnings?.(version)??[])warnings.add(warning);
         schemas.set(library, { metadata, fields: semantics });
       }
       const result = schemas.get(library);

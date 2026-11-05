@@ -3,7 +3,7 @@ import type {Native} from '../domain/types.js';
 /** Public, bounded author feedback. Never forwards backend messages or filesystem paths. */
 export function feedback(value:Native={}) {
  const transformations=(Array.isArray(value.transformations)?value.transformations:[]);
- const warnings=(Array.isArray(value.warnings)?value.warnings:[]).filter((v:unknown)=>typeof v==='string'&& /^(Native field checks|LaTeX requires|Math notation: |Remote media require|Translation unavailable)/.test(v as string));
+ const warnings=[...new Set<string>((Array.isArray(value.warnings)?value.warnings:[]).filter((v:unknown)=>typeof v==='string'&& /^(Native field checks|Library runtime: |LaTeX requires|Math notation: |Remote media require|Translation unavailable)/.test(v as string)))];
  for(const issue of value.mathWarnings||[])warnings.push(notationWarning(issue));
  return {...(value.scoring_preview?{scoring_preview:value.scoring_preview}:{}),report_version:'2',warnings:warnings.slice(0,20).map((v:string)=>v.slice(0,512)),warnings_truncated:value.warnings_truncated===true||warnings.length>20,
   mathematics:{detected:value.mathematics?.detected===true,...(typeof value.mathematics?.installed==='boolean'?{installed:value.mathematics.installed}:{}),...(value.mathematics?.detected?{library:'H5P.MathDisplay 1.0'}:{})},

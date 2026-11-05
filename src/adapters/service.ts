@@ -146,7 +146,7 @@ export class Service {
  }
  private async packageReport(result:Native,targetID?:string){
   const {ok,package_mode,required_libraries,missing_local_libraries}=result;
-  const checks=report('validation',ok,ok?[]:[{code:'LIBRARY_NOT_INSTALLED'}],{structure:'passed',semantics:ok?'passed':'not_run'});
+  const checks={...report('validation',ok,ok?[]:[{code:'LIBRARY_NOT_INSTALLED'}],{structure:'passed',semantics:ok?'passed':'not_run'}),...feedback(result)};
   if(!targetID)return {...checks,package_mode,required_libraries,missing_local_libraries};
   const target=(await (await this.vault()).objects.get(targetID,'target')).metadata;
   const installed=new Set(target.libraries.map((lib:Native)=>lib.machine_name+' '+lib.major+'.'+lib.minor));
@@ -226,7 +226,7 @@ export class Service {
    const destination=await this.destination(args.output_name);
    const result=await this.run('export',{activity:{language:'en',license:'U',assets:{},...args.activity},path:destination},signal);
    const artifact=await this.resources.artifact(destination,{h5p:result.h5p_json,preparation:result.preparation_manifest},result.content_json);
-   return {...report('export',true,[],{structure:'passed',semantics:'passed'}),artifact};
+   return {...report('export',true,[],{structure:'passed',semantics:'passed'}),...feedback(result),artifact};
   }
   if(name==='export_h5p_batch') {
    if(args.activities.length>limit('BATCH',50)) throw failure('LIMIT_EXCEEDED');

@@ -43,7 +43,7 @@ export function invalidInput(name:string) {
  const pointer=(error?.instancePath||'')+(child?'/'+String(child).replaceAll('~','~0').replaceAll('/','~1'):'');
  return Object.assign(failure('SCHEMA_VALIDATION_FAILED'),{pointer});
 }
-export const verification=(updates:Native={})=>({structure:'not_run',semantics:'not_run',importation:'not_run',playback:'not_run',grading:'not_run',...updates});
+export const verification=(updates:Native={})=>({structure:'not_run',semantics:'not_run',importation:'not_run',playback:'not_run',grading:'not_run',student_attempt:'not_run',persistence:'not_run',accessibility:'not_run',mobile:'not_run',...updates});
 export function diagnostic(error:Native) {
  const code=codes.aliases[error?.code]||error?.code;
  const key=Object.hasOwn(codes.codes,code)?code:'INTERNAL_ERROR';

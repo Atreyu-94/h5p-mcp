@@ -107,6 +107,18 @@
         "playback": {
           "$ref": "#/$defs/status"
         },
+        "student_attempt": {
+          "$ref": "#/$defs/status"
+        },
+        "persistence": {
+          "$ref": "#/$defs/status"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/status"
+        },
+        "mobile": {
+          "$ref": "#/$defs/status"
+        },
         "grading": {
           "$ref": "#/$defs/status"
         }

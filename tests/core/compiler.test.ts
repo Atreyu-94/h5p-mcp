@@ -396,3 +396,65 @@ test('stored SVG is validated, owner scoped and embedded only for a host-approve
   await host.close();await other.close();await fs.rm(tmp,{recursive:true,force:true});
  }
 },120000);
+
+test('runtime findings survive public source, native, stored and package paths with separate destination checks',async()=>{
+ const {Service}=await import('../../src/adapters/service.js');
+ const {valid}=await import('../../src/adapters/contracts.js');
+ const {FileLibraryRepository}=await import('../../src/h5p/libraries.js');
+ const {executeNative}=await import('../../src/h5p/native-content.js');
+ const {validatePackage}=await import('../../src/h5p/packages.js');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'h5p-runtime-findings-'));
+ const previous=process.env.H5P_MCP_EXPORT_DIR;process.env.H5P_MCP_EXPORT_DIR=path.join(root,'exports');
+ const service=new Service(undefined,{data:root,store:path.join(root,'store')});
+ try{
+  await compilerFixture(root);await service.initialize();
+  const libraries=path.join(root,'libraries');
+  const blank:Native={schema_version:'1',project_id:'qa',id:'number',title:'Number',type:'blanks',library:pin('H5P.Blanks 1.14'),question:plain('Enter \\(10\\)'),case_sensitive:true,ui:{language:'es'},blocks:[{id:'line',segments:[{id:'gap',answers:['10','10,0','10.0']}]}]};
+  const child={...blank};delete child.schema_version;delete child.project_id;
+  const source={schema_version:'1',project_id:'qa',id:'series',title:'Series',type:'question_set',library:pin('H5P.QuestionSet 1.21'),pass_percentage:100,questions:[child],feedback:{correct:plain('Both concepts'),incorrect:plain('Review each question')}};
+  const findings=(value:Native)=>value.warnings.filter((w:string)=>w.startsWith('Library runtime: '));
+  for(const [input,count] of [[blank,1],[source,2]] as const){
+   for(const tool of ['check_h5p_source','compile_h5p_source','build_h5p_source']){
+    const args=tool==='build_h5p_source'?{source:input,output_name:input.id}:{source:input};
+    const result=(await service.call(tool,args)).structuredContent;
+    expect(result.diagnostics).toEqual([]);expect(result.ok).toBe(true);expect(findings(result)).toHaveLength(count);
+    expect(valid('authoring_report',result)).toBe(true);
+    expect(result.verification).toMatchObject({importation:'not_run',playback:'not_run',student_attempt:'not_run',persistence:'not_run',accessibility:'not_run',mobile:'not_run',grading:'not_run'});
+    expect(JSON.stringify(result.warnings)).not.toContain(root);
+   }
+  }
+  const compiled=await compileSource(source,libraries);
+  expect(compiled.activity.params.endGame.overallFeedback[0].feedback).toBe('Review each question');
+  expect(compiled.activity.params.questions[0].params.a11yCheckingModeHeader).toBe('Modo de comprobación');
+  const activity={title:source.title,library:source.library.name,params:compiled.activity.params};
+  const native=(await service.call('prepare_h5p_activity',activity)).structuredContent;
+  expect(findings(native)).toHaveLength(2);
+  const exported=(await service.call('export_h5p_activity',{activity,output_name:'native-series'})).structuredContent;
+  expect(findings(exported)).toHaveLength(2);
+  expect(exported.mathematics.detected).toBe(true);
+  const stored=(await service.call('prepare_stored_h5p_source',{source})).structuredContent;
+  expect(findings(stored)).toHaveLength(2);
+  const artifact=(await service.call('export_prepared_h5p_activity',{preparation_id:stored.object_id,idempotency_key:'runtime-report'})).structuredContent;
+  expect(findings(artifact)).toHaveLength(2);expect(valid('stored_output',artifact)).toBe(true);
+  expect(artifact.mathematics.detected).toBe(true);
+  const filename=path.join(root,'exports','series.h5p');
+  const validated=(await service.call('validate_h5p_package',{path:filename})).structuredContent;
+  expect(validated.ok).toBe(true);expect(findings(validated)).toHaveLength(2);
+  const full=path.join(root,'exports','full.h5p');
+  await executeNative({action:'export',activity:compiled.activity,data_dir:root,path:full,export_mode:'with-libraries'});
+  expect(findings(await validatePackage(full))).toHaveLength(2);
+  const version={machineName:'H5P.Blanks',majorVersion:1,minorVersion:14};
+  const repo=new FileLibraryRepository(libraries);
+  const file=path.join(libraries,'H5P.Blanks-1.14/js/blanks.js');
+  const original=await fs.readFile(file,'utf8');
+  await fs.writeFile(file,original.replace('self.a11yHeader.innerHTML = self.params.a11yHeader;','self.a11yHeader.textContent = self.params.a11yCheckingModeHeader || self.params.a11yHeader;'));
+  expect(await repo.getRuntimeWarnings(version)).toEqual([]);
+  expect(findings(await compileSource(blank,libraries))).toEqual([]);
+  // A content-only package follows the supplied library installation; a full package carries its own bytes.
+  expect(findings(await validatePackage(filename,libraries))).toHaveLength(1);
+  expect(findings(await validatePackage(full,libraries))).toHaveLength(2);
+ }finally{
+  await service.close();if(previous===undefined)delete process.env.H5P_MCP_EXPORT_DIR;else process.env.H5P_MCP_EXPORT_DIR=previous;
+  await fs.rm(root,{recursive:true,force:true});
+ }
+},180000);

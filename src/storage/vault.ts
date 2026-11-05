@@ -120,7 +120,7 @@ export class Vault {
    const result:Native=await this.pool.run(()=>isolated({action:'export',data_dir:path.join(snapshot.root,'data'),activity:value.activity,allow_svg_content:hostPermitsSvg(targetID),path:path.join(stage,'payload')},signal,[path.join(prepared.root,'assets')]),signal);
    await this.objects.get(prepared.id,'preparation');await this.objects.get(snapshot.id,'libraries');
    if(targetID)await this.objects.get(targetID,'target');
-   return {mime:'application/zip',svgContent:result.svg_content,preparation_id:preparationID,library_snapshot_id:snapshot.id,h5p:result.h5p_json,target:result.svg_content?{...assessment,svg_target_profile_id:targetID}:assessment};
+   return {mime:'application/zip',feedback:feedback(result),svgContent:result.svg_content,preparation_id:preparationID,library_snapshot_id:snapshot.id,h5p:result.h5p_json,target:result.svg_content?{...assessment,svg_target_profile_id:targetID}:assessment};
   },{key,digest:inputDigest,signal:callerSignal});
  }
  async validate(packageID:string,signal?:AbortSignal,targetID?:string) {
